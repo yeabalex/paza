@@ -9,7 +9,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'https://3.223.18.171.nip.io',
         changeOrigin: true,
         secure: false,
       }
