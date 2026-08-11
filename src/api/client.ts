@@ -1,6 +1,8 @@
 const API_BASE_URL = '/api/v1';
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T | null> {
+  const tgInitData = (typeof window !== 'undefined' && window.Telegram?.WebApp?.initData) || '';
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -13,6 +15,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'ngrok-skip-browser-warning': 'true',
+          ...(tgInitData ? { 'X-Telegram-Init-Data': tgInitData } : {}),
           ...options.headers,
         },
       });

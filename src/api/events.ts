@@ -242,11 +242,13 @@ export async function sendEventInvite(params: {
     formData.append('image', params.imageBlob, 'invite_artwork.png');
   }
 
+  const tgInitData = window.Telegram?.WebApp?.initData || '';
   const res = await fetch('/api/v1/events/send-invite', {
     method: 'POST',
     body: formData,
     headers: {
       'ngrok-skip-browser-warning': 'true',
+      ...(tgInitData ? { 'X-Telegram-Init-Data': tgInitData } : {}),
     },
   });
 

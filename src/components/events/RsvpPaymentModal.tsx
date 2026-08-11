@@ -72,10 +72,12 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
+      const tgInitData = window.Telegram?.WebApp?.initData || '';
       const res = await fetch('/api/v1/events/upload-receipt', {
         method: 'POST',
         headers: {
           'ngrok-skip-browser-warning': 'true',
+          ...(tgInitData ? { 'X-Telegram-Init-Data': tgInitData } : {}),
         },
         body: formData,
       });
