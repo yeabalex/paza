@@ -3,6 +3,7 @@ import { X, Copy, Check, Upload, CreditCard, User, FileText, ExternalLink } from
 import type { EventItem, RsvpUser, TelegramUser } from '../../types';
 import type { EventDetailItem } from '../../api/events';
 import { markGoing } from '../../api/events';
+import { openTelegramInAppUrl } from '../../utils/telegram';
 
 interface RsvpPaymentModalProps {
   event: EventItem | EventDetailItem;
@@ -178,11 +179,8 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
 
     const handleOpenLink = (e: React.MouseEvent) => {
       e.preventDefault();
-      if (!postUrl) return;
-      if (window.Telegram?.WebApp?.openLink) {
-        window.Telegram.WebApp.openLink(postUrl);
-      } else {
-        window.open(postUrl, '_blank', 'noopener,noreferrer');
+      if (postUrl) {
+        openTelegramInAppUrl(postUrl);
       }
     };
 

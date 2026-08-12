@@ -23,6 +23,7 @@ import { GoingModal } from './GoingModal';
 import { InviteCustomizerModal } from './InviteCustomizerModal';
 import { OrganizerHeaderBadge } from './OrganizerHeaderBadge';
 import { RsvpPaymentModal } from './RsvpPaymentModal';
+import { openTelegramInAppUrl } from '../../utils/telegram';
 
 interface EventDetailProps {
   event: EventItem;
@@ -414,11 +415,7 @@ export function EventDetail({
 
           const handleOpenLink = (e: React.MouseEvent) => {
             e.preventDefault();
-            if (window.Telegram?.WebApp?.openLink) {
-              window.Telegram.WebApp.openLink(postUrl);
-            } else {
-              window.open(postUrl, '_blank', 'noopener,noreferrer');
-            }
+            openTelegramInAppUrl(postUrl);
           };
 
           return (
