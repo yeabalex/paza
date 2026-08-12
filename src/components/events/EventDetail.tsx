@@ -388,8 +388,10 @@ export function EventDetail({
           />
         </div>
 
-        {/* ── Social Media Source Button (Below Map) ── */}
+        {/* ── Social Media Source Button (Only shown if user is Going) ── */}
         {(() => {
+          if (!isGoing) return null;
+
           const postUrl = activeData.post_url || (
             activeData.id.startsWith('ig:') ? `https://www.instagram.com/p/${activeData.id.split(':')[1]}/` :
             activeData.id.startsWith('tg:') ? `https://t.me/s/${activeData.id.split(':')[1]}` :
@@ -410,12 +412,20 @@ export function EventDetail({
             platformType = 'tiktok';
           }
 
+          const handleOpenLink = (e: React.MouseEvent) => {
+            e.preventDefault();
+            if (window.Telegram?.WebApp?.openLink) {
+              window.Telegram.WebApp.openLink(postUrl);
+            } else {
+              window.open(postUrl, '_blank', 'noopener,noreferrer');
+            }
+          };
+
           return (
             <div className="social-source-container">
               <a
                 href={postUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={handleOpenLink}
                 className={`social-source-btn ${platformType}`}
                 title={`View original post on ${
                   platformType === 'instagram' ? 'Instagram' : platformType === 'telegram' ? 'Telegram' : platformType === 'tiktok' ? 'TikTok' : 'Source'
