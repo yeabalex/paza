@@ -19,7 +19,8 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const isPaid = (event.entrance_fee_etb || 0) > 0;
+  const isScraped = event.source_type === 'scraped' || event.id.includes(':') || event.id.startsWith('scraped_');
+  const isPaid = !isScraped && (event.entrance_fee_etb || 0) > 0;
   const initialName = telegramUser
     ? `${telegramUser.first_name || ''} ${telegramUser.last_name || ''}`.trim()
     : '';
@@ -187,12 +188,28 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
               style={{
                 fontSize: '15px',
                 fontWeight: 700,
-                color: isPaid ? '#ef4444' : '#22c55e',
+                color: isPaid ? '#ef4444' : (event.entrance_fee_etb || 0) > 0 ? '#f59e0b' : '#22c55e',
               }}
             >
-              {isPaid ? `${event.entrance_fee_etb} ETB` : 'FREE'}
+              {(event.entrance_fee_etb || 0) > 0 ? `${event.entrance_fee_etb} ETB` : 'FREE'}
             </span>
           </div>
+
+          {isScraped && (
+            <div
+              style={{
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                lineHeight: '1.4',
+              }}
+            >
+              ℹ️ Explore event from social media. Registration & entrance fee (if paid) are managed directly with event organizers at the venue.
+            </div>
+          )}
 
           {/* Organizer Payout Account Information (if paid or accounts configured) */}
           {isPaid && (
@@ -417,100 +434,102 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
             </div>
           )}
 
-          {/* 4. Receipt / Screenshot Attachment */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              {isPaid ? 'Attach Payment Receipt Screenshot' : 'Attach File/Photo (Optional)'}
-            </label>
+          {/* 4. Receipt / Screenshot Attachment (Organizer Events Only) */}
+          {!isScraped && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {isPaid ? 'Attach Payment Receipt Screenshot' : 'Attach File/Photo (Optional)'}
+              </label>
 
-            {screenshotUrl ? (
-              <div
-                style={{
-                  position: 'relative',
-                  borderRadius: '10px',
-                  overflow: 'hidden',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  maxHeight: '140px',
-                }}
-              >
-                <img
-                  src={screenshotUrl}
-                  alt="Receipt Preview"
-                  style={{ width: '100%', height: '140px', objectFit: 'cover' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScreenshotUrl(null);
-                    setScreenshotName(null);
-                  }}
+              {screenshotUrl ? (
+                <div
                   style={{
-                    position: 'absolute',
-                    top: '8px',
-                    right: '8px',
-                    background: 'rgba(0, 0, 0, 0.75)',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: '26px',
-                    height: '26px',
-                    color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
+                    position: 'relative',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    maxHeight: '140px',
                   }}
                 >
-                  <X size={14} />
-                </button>
-                <div style={{ position: 'absolute', bottom: '6px', left: '8px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', color: '#ffffff' }}>
-                  {screenshotName || 'Attached Screenshot'}
+                  <img
+                    src={screenshotUrl}
+                    alt="Receipt Preview"
+                    style={{ width: '100%', height: '140px', objectFit: 'cover' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScreenshotUrl(null);
+                      setScreenshotName(null);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'rgba(0, 0, 0, 0.75)',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: '26px',
+                      height: '26px',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                  <div style={{ position: 'absolute', bottom: '6px', left: '8px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', color: '#ffffff' }}>
+                    {screenshotName || 'Attached Screenshot'}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <label
-                htmlFor="rsvp-receipt-upload"
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '16px',
-                  border: '2px dashed rgba(255, 255, 255, 0.15)',
-                  borderRadius: '10px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  overflow: 'hidden',
-                }}
-              >
-                <Upload size={20} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#ffffff' }}>
-                  {isUploading ? 'Uploading to Cloudinary...' : 'Click to upload receipt screenshot'}
-                </span>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                  {isUploading ? 'Please wait a moment' : 'PNG, JPG up to 10MB'}
-                </span>
-                <input
-                  id="rsvp-receipt-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  disabled={isUploading}
+              ) : (
+                <label
+                  htmlFor="rsvp-receipt-upload"
                   style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    opacity: 0,
+                    position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '16px',
+                    border: '2px dashed rgba(255, 255, 255, 0.15)',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.02)',
                     cursor: 'pointer',
+                    textAlign: 'center',
+                    overflow: 'hidden',
                   }}
-                />
-              </label>
-            )}
-          </div>
+                >
+                  <Upload size={20} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#ffffff' }}>
+                    {isUploading ? 'Uploading to Cloudinary...' : 'Click to upload receipt screenshot'}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    {isUploading ? 'Please wait a moment' : 'PNG, JPG up to 10MB'}
+                  </span>
+                  <input
+                    id="rsvp-receipt-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    disabled={isUploading}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer',
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           {/* 5. Message / Note */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
