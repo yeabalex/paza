@@ -388,6 +388,68 @@ export function EventDetail({
           />
         </div>
 
+        {/* ── Social Media Source Button (Below Map) ── */}
+        {(() => {
+          const postUrl = activeData.post_url || (
+            activeData.id.startsWith('ig:') ? `https://www.instagram.com/p/${activeData.id.split(':')[1]}/` :
+            activeData.id.startsWith('tg:') ? `https://t.me/s/${activeData.id.split(':')[1]}` :
+            undefined
+          );
+
+          if (!postUrl) return null;
+
+          let platformType: 'instagram' | 'telegram' | 'tiktok' | 'web' = 'web';
+          const urlLower = postUrl.toLowerCase();
+          const idLower = activeData.id.toLowerCase();
+
+          if (urlLower.includes('instagram') || idLower.startsWith('ig:')) {
+            platformType = 'instagram';
+          } else if (urlLower.includes('t.me') || idLower.startsWith('tg:')) {
+            platformType = 'telegram';
+          } else if (urlLower.includes('tiktok') || idLower.startsWith('tiktok:')) {
+            platformType = 'tiktok';
+          }
+
+          return (
+            <div className="social-source-container">
+              <a
+                href={postUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`social-source-btn ${platformType}`}
+                title={`View original post on ${
+                  platformType === 'instagram' ? 'Instagram' : platformType === 'telegram' ? 'Telegram' : platformType === 'tiktok' ? 'TikTok' : 'Source'
+                }`}
+              >
+                <div className="social-source-circle">
+                  {platformType === 'instagram' && (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+                    </svg>
+                  )}
+                  {platformType === 'telegram' && (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.37.74-.56 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+                    </svg>
+                  )}
+                  {platformType === 'tiktok' && (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64c.29 0 .56.04.83.12V9.37a6.33 6.33 0 00-1-.08A6.26 6.26 0 003 15.55a6.26 6.26 0 0010.71 4.41h.01V12.1c1.55 1.1 3.41 1.75 5.43 1.75v-3.76a4.85 4.85 0 01-3.56-3.4z"/>
+                    </svg>
+                  )}
+                  {platformType === 'web' && <ExternalLink size={18} />}
+                </div>
+                <span className="social-source-label">
+                  View on {platformType === 'instagram' ? 'Instagram' : platformType === 'telegram' ? 'Telegram' : platformType === 'tiktok' ? 'TikTok' : 'Original Post'}
+                </span>
+                <ExternalLink size={14} className="social-source-arrow" />
+              </a>
+            </div>
+          );
+        })()}
+
         {copied && <div className="detail-toast">Link copied to clipboard!</div>}
       </div>
 

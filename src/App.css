@@ -1731,3 +1731,87 @@
   color: var(--text-on-accent);
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   SOCIAL MEDIA SOURCE BADGE BUTTON (Below Map in EventDetail)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.social-source-container {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.social-source-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px 8px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.social-source-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.social-source-btn:active {
+  transform: scale(0.96);
+}
+
+.social-source-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.social-source-btn.instagram .social-source-circle {
+  background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%);
+}
+
+.social-source-btn.telegram .social-source-circle {
+  background: linear-gradient(135deg, #2aabee 0%, #229ed9 100%);
+}
+
+.social-source-btn.tiktok .social-source-circle {
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #00f2fe;
+}
+
+.social-source-btn.web .social-source-circle {
+  background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+}
+
+.social-source-label {
+  letter-spacing: 0.2px;
+}
+
+.social-source-arrow {
+  color: var(--text-muted);
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.social-source-btn:hover .social-source-arrow {
+  color: #ffffff;
+  transform: translate(2px, -2px);
+}
+
+

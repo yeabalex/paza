@@ -166,7 +166,12 @@ export function InviteCardHTML({
       </div>
 
       {/* ── Bottom branding ── */}
-      <div className="icard-brand">
+      <div className="icard-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+        <img
+          src="/logo.png"
+          alt="PAZA"
+          style={{ width: '32px', height: '32px', objectFit: 'contain', background: 'transparent' }}
+        />
         <span className="icard-brand-text">PAZA</span>
       </div>
     </div>

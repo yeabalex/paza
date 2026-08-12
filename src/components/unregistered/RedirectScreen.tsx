@@ -10,8 +10,21 @@ export function RedirectScreen({ reason = 'outside_telegram' }: RedirectScreenPr
   return (
     <div className="modal-overlay">
       <div className="modal-content unregistered-screen">
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+          <img
+            src="/logo.png"
+            alt="PAZA Logo"
+            style={{
+              width: '110px',
+              height: '110px',
+              objectFit: 'contain',
+              background: 'transparent',
+              filter: 'drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35))',
+            }}
+          />
+        </div>
         <div style={{ color: '#0088cc', display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-          {isPhonePending ? <Smartphone size={56} /> : <Send size={56} />}
+          {isPhonePending ? <Smartphone size={40} /> : <Send size={40} />}
         </div>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '8px' }}>
           {isPhonePending ? 'Finish Registration' : 'Open in Telegram'}

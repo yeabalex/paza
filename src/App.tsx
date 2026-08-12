@@ -335,22 +335,17 @@ export function App() {
           textAlign: 'center',
         }}
       >
-        <div
+        <img
+          src="/logo.png"
+          alt="PAZA Events"
           style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '16px',
-            background: 'var(--accent)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 24px rgba(139, 168, 136, 0.2)',
+            width: '120px',
+            height: '120px',
+            objectFit: 'contain',
+            background: 'transparent',
+            filter: 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.35))',
           }}
-        >
-          <span style={{ fontSize: '26px', fontWeight: 900, color: '#000', fontFamily: 'var(--font-family)', letterSpacing: '-1px' }}>
-            P
-          </span>
-        </div>
+        />
         <div>
           <h1 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
             PAZA EVENTS

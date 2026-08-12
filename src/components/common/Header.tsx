@@ -10,8 +10,24 @@ export function Header({ user, onOpenSettings }: HeaderProps) {
   return (
     <header className="header-bar">
       <div className="user-info">
-        <div className="avatar">
-          {user?.full_name?.charAt(0) || 'P'}
+        <div
+          className="avatar"
+          style={{
+            width: '44px',
+            height: '44px',
+            overflow: 'hidden',
+            background: user?.full_name ? undefined : 'transparent',
+          }}
+        >
+          {user?.full_name ? (
+            user.full_name.charAt(0)
+          ) : (
+            <img
+              src="/logo.png"
+              alt="PAZA"
+              style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'transparent' }}
+            />
+          )}
         </div>
         <div className="user-meta">
           <h3>{user?.full_name || 'PAZA'}</h3>

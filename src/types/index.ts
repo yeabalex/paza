@@ -29,6 +29,7 @@ export interface EventItem {
   category: string;
   image_url?: string;
   source_type: 'organizer' | 'scraped';
+  post_url?: string;
   rsvp_count?: number;
   max_capacity?: number | string;
   organizer_name?: string;

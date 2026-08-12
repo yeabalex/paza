@@ -41,10 +41,23 @@ export const TicketPassScreen: React.FC<TicketPassScreenProps> = ({ eventId, tic
           border: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: '24px',
           padding: '28px 24px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
           textAlign: 'center',
         }}
       >
+        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+          <img
+            src="/logo.png"
+            alt="PAZA Logo"
+            style={{
+              width: '84px',
+              height: '84px',
+              objectFit: 'contain',
+              background: 'transparent',
+              filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.4))',
+            }}
+          />
+        </div>
+
         {loading ? (
           <div style={{ padding: '40px 0' }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Verifying Ticket Pass...</p>
