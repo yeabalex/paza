@@ -122,10 +122,9 @@ export function App() {
           photo_url: tgUser?.photo_url,
         });
 
-        // Fast-path: Check local storage persistence synchronously to avoid blocking UI
+        // Fast-path: Check local storage persistence synchronously for this user
         const hasOnboardedLocally =
-          localStorage.getItem(`onboarding_completed_${telegramId}`) === 'true' ||
-          localStorage.getItem('paza_onboarding_completed') === 'true';
+          localStorage.getItem(`onboarding_completed_${telegramId}`) === 'true';
 
         let savedLocalSlugs: string[] = [];
         try {
@@ -275,9 +274,8 @@ export function App() {
     const tgId = user?.telegram_id || 999888777;
     await updateUserInterests(tgId, selectedSlugs);
 
-    // Save completion flags to localStorage to ensure user is never asked again
+    // Save completion flags to localStorage for this user
     localStorage.setItem(`onboarding_completed_${tgId}`, 'true');
-    localStorage.setItem('paza_onboarding_completed', 'true');
     localStorage.setItem(`selected_interests_${tgId}`, JSON.stringify(selectedSlugs));
 
     setViewState('feed');
