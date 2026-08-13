@@ -393,6 +393,21 @@ export function App() {
         </div>
       ) : (
         <>
+          {/* ── Header Before Filters ── */}
+          <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+                Explore Events
+              </h1>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Discover events happening in Addis Ababa
+              </p>
+            </div>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-card)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+              📍 Addis Ababa
+            </span>
+          </div>
+
           {/* ── Category Scroll Filter Pills (Dynamic categories from Redis) ── */}
           <CategoryScroll
             categories={categories}
