@@ -3,7 +3,6 @@ import type { UserProfile, Interest, EventItem, TelegramUser } from './types';
 import { fetchInterests, fetchUserProfile, updateUserInterests } from './api/users';
 import {
   fetchExploreEvents,
-  fetchForYouEvents,
   fetchCategories,
   saveScrapedEvent,
   removeSavedScrapedEvent,
@@ -12,12 +11,9 @@ import {
   type CategoryInfo,
 } from './api/events';
 
-
 import { BottomNav } from './components/common/BottomNav';
-import { FeedTabs } from './components/events/FeedTabs';
 import { CategoryScroll } from './components/events/CategoryScroll';
 import { SearchBar } from './components/events/SearchBar';
-import { EventCard } from './components/events/EventCard';
 import { ExplorePostCard } from './components/events/ExplorePostCard';
 import { InterestSelector } from './components/onboarding/InterestSelector';
 import { RedirectScreen } from './components/unregistered/RedirectScreen';
@@ -62,7 +58,6 @@ export function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [availableInterests, setAvailableInterests] = useState<Interest[]>(DEFAULT_INTERESTS);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
-  const [activeFeed, setActiveFeed] = useState<'for-you' | 'explore'>('explore');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewState, setViewState] = useState<'loading' | 'onboarding' | 'feed' | 'unregistered'>('loading');
@@ -213,14 +208,10 @@ export function App() {
         const rsvpEvts = await fetchUserRsvps(tgId);
         setEvents(rsvpEvts);
         setHasMore(false);
-      } else if (activeFeed === 'explore') {
+      } else {
         const exploreEvts = await fetchExploreEvents(activeCategory, 0);
         setEvents(exploreEvts);
         setHasMore(exploreEvts.length >= 7);
-      } else {
-        const forYouEvts = await fetchForYouEvents(tgId, activeCategory);
-        setEvents(forYouEvts);
-        setHasMore(false); // For You doesn't paginate yet
       }
       setIsLoadingEvents(false);
     };
@@ -228,11 +219,11 @@ export function App() {
     if (viewState === 'feed') {
       loadFirstPage();
     }
-  }, [activeFeed, activeCategory, activeTab, viewState, user?.telegram_id]);
+  }, [activeCategory, activeTab, viewState, user?.telegram_id]);
 
   // Load more on scroll (IntersectionObserver)
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore || isLoadingMore || activeFeed !== 'explore' || activeTab === 'saved') return;
+    if (!sentinelRef.current || !hasMore || isLoadingMore || activeTab !== 'home') return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -254,7 +245,7 @@ export function App() {
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [hasMore, isLoadingMore, events.length, activeCategory, activeFeed, activeTab]);
+  }, [hasMore, isLoadingMore, events.length, activeCategory, activeTab]);
 
   const toggleInterest = (slug: string) => {
     setSelectedSlugs((prev) =>
@@ -402,19 +393,9 @@ export function App() {
         </div>
       ) : (
         <>
-          {/* ── Feed Toggle Tabs ── */}
-          <FeedTabs activeFeed={activeFeed} onSelectFeed={setActiveFeed} />
-
-          {/* ── Category Scroll Filter Pills ── */}
+          {/* ── Category Scroll Filter Pills (Dynamic categories from Redis) ── */}
           <CategoryScroll
-            categories={
-              activeFeed === 'explore'
-                ? categories
-                : availableInterests.map((interest) => ({
-                    slug: interest.slug,
-                    label: interest.name_en.split(',')[0].split(' &')[0], // Shorten label for pills
-                  }))
-            }
+            categories={categories}
             activeCategory={activeCategory}
             onSelectCategory={setActiveCategory}
           />
@@ -464,29 +445,19 @@ export function App() {
             </div>
           )
         ) : (
-          filteredEvents.map((ev) =>
-            activeFeed === 'explore' || activeTab === 'saved' || activeTab === 'tickets' ? (
-              <ExplorePostCard
-                key={ev.id}
-                event={ev}
-                isJoined={activeTab === 'saved' || activeTab === 'tickets' ? true : !!joinedEvents[ev.id]}
-                onToggleJoin={toggleJoin}
-                onClick={() => setSelectedEvent(ev)}
-              />
-            ) : (
-              <EventCard
-                key={ev.id}
-                event={ev}
-                isJoined={!!joinedEvents[ev.id]}
-                onToggleJoin={toggleJoin}
-                onClick={() => setSelectedEvent(ev)}
-              />
-            )
-          )
+          filteredEvents.map((ev) => (
+            <ExplorePostCard
+              key={ev.id}
+              event={ev}
+              isJoined={activeTab === 'saved' || activeTab === 'tickets' ? true : !!joinedEvents[ev.id]}
+              onToggleJoin={toggleJoin}
+              onClick={() => setSelectedEvent(ev)}
+            />
+          ))
         )}
 
         {/* Infinite scroll sentinel */}
-        {!isLoadingEvents && hasMore && activeFeed === 'explore' && (
+        {!isLoadingEvents && hasMore && activeTab === 'home' && (
           <div ref={sentinelRef} style={{ padding: '20px', textAlign: 'center' }}>
             {isLoadingMore && (
               <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
