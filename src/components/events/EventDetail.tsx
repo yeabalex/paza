@@ -389,13 +389,17 @@ export function EventDetail({
           />
         </div>
 
-        {/* ── Social Media Source Button (Only shown if user is Going) ── */}
+        {/* ── Social Media Source Button (Displayed by default for scraped / social events) ── */}
         {(() => {
-          if (!isGoing) return null;
+          const id = activeData.id || '';
+          const parts = id.split(':');
+          const prefix = parts[0]?.toLowerCase();
+          const rest = parts.slice(1).join(':');
 
           const postUrl = activeData.post_url || (
-            activeData.id.startsWith('ig:') ? `https://www.instagram.com/p/${activeData.id.split(':')[1]}/` :
-            activeData.id.startsWith('tg:') ? `https://t.me/s/${activeData.id.split(':')[1]}` :
+            prefix === 'ig' || prefix === 'instagram' ? `https://www.instagram.com/p/${rest}/` :
+            prefix === 'tg' || prefix === 'telegram' ? `https://t.me/s/${rest}` :
+            prefix === 'tiktok' ? `https://www.tiktok.com/@${rest}` :
             undefined
           );
 
@@ -405,9 +409,9 @@ export function EventDetail({
           const urlLower = postUrl.toLowerCase();
           const idLower = activeData.id.toLowerCase();
 
-          if (urlLower.includes('instagram') || idLower.startsWith('ig:')) {
+          if (urlLower.includes('instagram') || idLower.startsWith('ig:') || idLower.startsWith('instagram:')) {
             platformType = 'instagram';
-          } else if (urlLower.includes('t.me') || idLower.startsWith('tg:')) {
+          } else if (urlLower.includes('t.me') || idLower.startsWith('tg:') || idLower.startsWith('telegram:')) {
             platformType = 'telegram';
           } else if (urlLower.includes('tiktok') || idLower.startsWith('tiktok:')) {
             platformType = 'tiktok';
