@@ -60,13 +60,14 @@ export async function fetchCategories(): Promise<CategoryInfo[]> {
   return result;
 }
 
-export async function fetchExploreEvents(category?: string, skip = 0): Promise<EventItem[]> {
+export async function fetchExploreEvents(category?: string, skip = 0, timeframe: 'upcoming' | 'past' | 'all' = 'upcoming'): Promise<EventItem[]> {
   const params = new URLSearchParams();
   if (category && category !== 'all') params.set('category', category);
+  params.set('timeframe', timeframe);
   params.set('skip', skip.toString());
   params.set('limit', PAGE_SIZE.toString());
   const query = params.toString() ? `?${params.toString()}` : '';
-  const cacheKey = `explore_${category || 'all'}_${skip}`;
+  const cacheKey = `explore_${category || 'all'}_${timeframe}_${skip}`;
 
   const cached = getFromCache<EventItem[]>(cacheKey);
   if (cached) return cached;

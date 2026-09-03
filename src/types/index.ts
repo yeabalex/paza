@@ -41,6 +41,7 @@ export interface EventItem {
   telebirr_name?: string;
   cbe_account?: string;
   cbe_name?: string;
+  is_passed?: boolean;
 }
 
 export interface RsvpUser {

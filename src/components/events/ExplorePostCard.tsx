@@ -36,10 +36,16 @@ export function ExplorePostCard({ event, isJoined, onToggleJoin, onClick }: Expl
         </div>
       </div>
 
-      {/* Fee Badge */}
-      <span className={`event-row-badge ${event.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
-        {event.entrance_fee_etb > 0 ? `${event.entrance_fee_etb} ETB` : 'FREE'}
-      </span>
+      {/* Fee Badge / Concluded Badge */}
+      {event.is_passed ? (
+        <span className="event-row-badge" style={{ background: 'rgba(255, 255, 255, 0.08)', color: 'var(--text-muted)' }}>
+          ENDED
+        </span>
+      ) : (
+        <span className={`event-row-badge ${event.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
+          {event.entrance_fee_etb > 0 ? `${event.entrance_fee_etb} ETB` : 'FREE'}
+        </span>
+      )}
 
       {/* Bookmark / Save Action Button */}
       <button

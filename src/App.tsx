@@ -73,6 +73,7 @@ export function App() {
   const [verifyTicketParams, setVerifyTicketParams] = useState<{ eventId: string; ticketCode: string } | null>(null);
 
   const [unregisteredReason, setUnregisteredReason] = useState<'outside_telegram' | 'unregistered_phone'>('outside_telegram');
+  const [timeframe, setTimeframe] = useState<'upcoming' | 'past'>('upcoming');
 
   // Ref for infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -209,7 +210,7 @@ export function App() {
         setEvents(rsvpEvts);
         setHasMore(false);
       } else {
-        const exploreEvts = await fetchExploreEvents(activeCategory, 0);
+        const exploreEvts = await fetchExploreEvents(activeCategory, 0, timeframe);
         setEvents(exploreEvts);
         setHasMore(exploreEvts.length >= 7);
       }
@@ -219,7 +220,7 @@ export function App() {
     if (viewState === 'feed') {
       loadFirstPage();
     }
-  }, [activeCategory, activeTab, viewState, user?.telegram_id]);
+  }, [activeCategory, activeTab, viewState, user?.telegram_id, timeframe]);
 
   // Load more on scroll (IntersectionObserver)
   useEffect(() => {
@@ -229,7 +230,7 @@ export function App() {
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
           setIsLoadingMore(true);
-          fetchExploreEvents(activeCategory, events.length).then((moreEvts) => {
+          fetchExploreEvents(activeCategory, events.length, timeframe).then((moreEvts) => {
             if (moreEvts.length === 0) {
               setHasMore(false);
             } else {
@@ -245,7 +246,7 @@ export function App() {
 
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [hasMore, isLoadingMore, events.length, activeCategory, activeTab]);
+  }, [hasMore, isLoadingMore, events.length, activeCategory, activeTab, timeframe]);
 
   const toggleInterest = (slug: string) => {
     setSelectedSlugs((prev) =>
@@ -393,11 +394,47 @@ export function App() {
         </div>
       ) : (
         <>
-          {/* ── Header Before Filters ── */}
-          <div style={{ padding: '16px 20px 4px' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
-              Explore Events
+          {/* ── Header Before Filters with Upcoming/Past Switcher ── */}
+          <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px', margin: 0 }}>
+              {timeframe === 'past' ? 'Past Events' : 'Explore Events'}
             </h1>
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '3px', gap: '2px' }}>
+              <button
+                type="button"
+                onClick={() => setTimeframe('upcoming')}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: timeframe === 'upcoming' ? 'var(--accent)' : 'transparent',
+                  color: timeframe === 'upcoming' ? '#fff' : 'var(--text-muted)',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Upcoming
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeframe('past')}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: timeframe === 'past' ? 'var(--accent)' : 'transparent',
+                  color: timeframe === 'past' ? '#fff' : 'var(--text-muted)',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Past
+              </button>
+            </div>
           </div>
 
           {/* ── Category Scroll Filter Pills (Dynamic categories from Redis) ── */}
