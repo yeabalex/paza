@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   AlertTriangle,
 } from 'lucide-react';
-import type { EventItem, RsvpUser, TelegramUser } from '../../types';
+import type { EventItem, RsvpUser, User } from '../../types';
 import {
   fetchEventDetail,
   fetchRsvps,
@@ -23,14 +23,14 @@ import { GoingModal } from './GoingModal';
 import { InviteCustomizerModal } from './InviteCustomizerModal';
 import { OrganizerHeaderBadge } from './OrganizerHeaderBadge';
 import { RsvpPaymentModal } from './RsvpPaymentModal';
-import { openTelegramInAppUrl } from '../../utils/telegram';
+import { openExternalUrl } from '../../utils/telegram';
 
 interface EventDetailProps {
   event: EventItem;
   isJoined: boolean;
   onBack: () => void;
   onToggleJoin: (eventId: string) => void;
-  telegramUser: TelegramUser | null;
+  telegramUser: User | null;
 }
 
 const MAX_AVATARS = 5;
@@ -419,7 +419,7 @@ export function EventDetail({
 
           const handleOpenLink = (e: React.MouseEvent) => {
             e.preventDefault();
-            openTelegramInAppUrl(postUrl);
+            openExternalUrl(postUrl);
           };
 
           return (

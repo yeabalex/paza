@@ -138,9 +138,7 @@ jobs:
           GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
           PIPELINE_API_KEY="${{ secrets.PIPELINE_API_KEY }}"
 
-          TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          MINI_APP_URL="${{ secrets.MINI_APP_URL }}"
-          ADMIN_TELEGRAM_CHAT_ID="${{ secrets.ADMIN_TELEGRAM_CHAT_ID }}"
+          WEB_APP_URL="${{ secrets.WEB_APP_URL }}"
 
           INSTAGRAM_USERNAME="${{ secrets.INSTAGRAM_USERNAME }}"
           INSTAGRAM_PASSWORD="${{ secrets.INSTAGRAM_PASSWORD }}"
@@ -212,14 +210,6 @@ jobs:
                   - "8000:8000"
                 volumes:
                   - backend_static:/app/static
-
-              bot:
-                image: ${BACKEND_IMAGE}
-                container_name: paza_bot
-                restart: always
-                command: ["python", "run_bot.py"]
-                env_file:
-                  - .env
 
               frontend:
                 image: ${FRONTEND_IMAGE}

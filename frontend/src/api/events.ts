@@ -227,35 +227,35 @@ export async function sendEventInvite(params: {
   eventId: string;
   inviterName: string;
   inviterUsername?: string;
-  inviteeTelegramId: number;
+  inviteeTelegramId?: number;
   inviteeUsername?: string;
   vibe?: string;
   imageBlob?: Blob;
-}): Promise<{ status: string; message: string; image_url?: string }> {
+}): Promise<{ status: string; message: string; invite_url?: string; image_url?: string }> {
   const formData = new FormData();
   formData.append('event_id', params.eventId);
   formData.append('inviter_name', params.inviterName);
   if (params.inviterUsername) formData.append('inviter_username', params.inviterUsername);
-  formData.append('invitee_telegram_id', params.inviteeTelegramId.toString());
+  if (params.inviteeTelegramId) formData.append('invitee_telegram_id', params.inviteeTelegramId.toString());
   if (params.inviteeUsername) formData.append('invitee_username', params.inviteeUsername);
   if (params.vibe) formData.append('vibe', params.vibe);
   if (params.imageBlob) {
     formData.append('image', params.imageBlob, 'invite_artwork.png');
   }
 
-  const tgInitData = window.Telegram?.WebApp?.initData || '';
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('paza_user_id') : null;
   const res = await fetch('/api/v1/events/send-invite', {
     method: 'POST',
     body: formData,
     headers: {
       'ngrok-skip-browser-warning': 'true',
-      ...(tgInitData ? { 'X-Telegram-Init-Data': tgInitData } : {}),
+      ...(userId ? { 'X-User-Id': userId } : {}),
     },
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || 'Failed to send bot invite.');
+    throw new Error(err.detail || 'Failed to generate invite.');
   }
 
   return await res.json();

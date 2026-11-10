@@ -1,6 +1,6 @@
 # Paza Monorepo (Turborepo)
 
-High-performance Turborepo monorepo for **Paza**, containing both the FastAPI backend services and the Telegram Mini App frontend (React 19 + Vite).
+High-performance Turborepo monorepo for **Paza**, a modern full-stack web application for discovering, bookmarking, and RSVPing to events in Addis Ababa.
 
 ---
 
@@ -11,13 +11,13 @@ paza/
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml        # Root CI/CD pipeline (Turbo lint/build + Docker images build/push + EC2 deploy)
-├── backend/                  # FastAPI backend server, Telegram bot poller, and ingestion pipeline
+├── backend/                  # FastAPI backend server, REST API, and automated ingestion pipeline
 │   ├── app/                  # REST endpoints, database models, schemas, and AI services
 │   ├── Dockerfile            # Python 3.11 container specification
 │   ├── requirements.txt      # Python dependencies
 │   ├── package.json          # Backend workspace scripts for Turborepo
-│   └── run_bot.py            # Telegram Bot runtime
-├── frontend/                 # Telegram Mini App client (React 19 + TypeScript + Vite)
+│   └── schema.sql            # PostgreSQL database schema
+├── frontend/                 # Web App client (React 19 + TypeScript + Vite + Tailwind CSS)
 │   ├── src/                  # React components, pages, hooks, and API clients
 │   ├── Dockerfile            # Multi-stage production container (Node 20 builder + Nginx runner)
 │   ├── nginx.conf            # Nginx SPA router and backend API proxy

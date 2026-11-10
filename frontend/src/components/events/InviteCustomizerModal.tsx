@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Share2, Download, Sparkles, Heart, Users, Send } from 'lucide-react';
-import type { EventItem, TelegramUser } from '../../types';
+import type { EventItem, User } from '../../types';
+import { InviteCardHTML } from './InviteCardHTML';
 import { searchUsers, type UserSearchResult } from '../../api/users';
-import { sendEventInvite } from '../../api/events';
-import { InviteCardHTML, type VibeType } from './InviteCardHTML';
+import {
+  Download,
+  Share2,
+  X,
+  Search,
+  Sparkles,
+  Heart,
+  Beer,
+  Link as LinkIcon,
+} from 'lucide-react';
 
 interface InviteCustomizerModalProps {
   event: EventItem;
-  telegramUser: TelegramUser | null;
+  telegramUser: User | null;
   onClose: () => void;
 }
 
@@ -16,17 +24,14 @@ export function InviteCustomizerModal({
   telegramUser,
   onClose,
 }: InviteCustomizerModalProps) {
+  const [selectedInvitee, setSelectedInvitee] = useState<UserSearchResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedInvitee, setSelectedInvitee] = useState<UserSearchResult | null>(null);
-  const [vibe, setVibe] = useState<VibeType>('casual');
+  const [vibe, setVibe] = useState<'casual' | 'date' | 'hangout'>('casual');
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [isSendingBotInvite, setIsSendingBotInvite] = useState(false);
-  const [botInviteSuccessMsg, setBotInviteSuccessMsg] = useState<string | null>(null);
 
-  // Debounced search logic (300ms)
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -45,7 +50,7 @@ export function InviteCustomizerModal({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const activeInviter: TelegramUser = telegramUser || {
+  const activeInviter: User = telegramUser || {
     id: 999888777,
     first_name: 'You',
     username: 'you',
@@ -62,81 +67,51 @@ export function InviteCustomizerModal({
     setVibe('casual');
   };
 
-  // Telegram Mini App Deep Link
-  const shareLink = `https://t.me/AddisEventBot?startapp=evt_${encodeURIComponent(event.id)}${
-    selectedInvitee ? `_by_${activeInviter.id}` : ''
-  }`;
+  const shareLink = typeof window !== 'undefined'
+    ? `${window.location.origin}/?event_id=${encodeURIComponent(event.id)}${
+        selectedInvitee ? `&invited_by=${activeInviter.id}` : ''
+      }`
+    : '';
 
   const handleDownloadImage = () => {
     if (!canvasElement) return;
     const link = document.createElement('a');
     link.download = `invite_${event.title.replace(/\s+/g, '_')}.png`;
-    link.href = canvasElement.toDataURL('image/png');
-    link.click();
-  };
-
-  const handleShare = async () => {
-    if (!canvasElement) return;
-
-    try {
-      canvasElement.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], 'event_invite.png', { type: 'image/png' });
-
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: event.title,
-            text: selectedInvitee
-              ? `${activeInviter.first_name} invited ${selectedInvitee.full_name || selectedInvitee.username} to ${event.title}!`
-              : `${activeInviter.first_name} invites you to ${event.title}!`,
-            url: shareLink,
-            files: [file],
-          });
-        } else {
-          // Fallback: Copy link
-          await navigator.clipboard.writeText(shareLink);
-          setCopiedLink(true);
-          setTimeout(() => setCopiedLink(false), 2500);
-        }
-      });
-    } catch (e) {
-      console.error('Error sharing card', e);
+    // If canvas element is HTML, use canvas render or fallback
+    if ('toDataURL' in canvasElement) {
+      link.href = (canvasElement as HTMLCanvasElement).toDataURL('image/png');
+      link.click();
     }
   };
 
-  const handleSendBotInvite = async () => {
-    if (!selectedInvitee || !canvasElement) return;
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: event.title,
+          text: selectedInvitee
+            ? `${activeInviter.first_name} invited ${selectedInvitee.full_name || selectedInvitee.username} to ${event.title}!`
+            : `${activeInviter.first_name} invites you to ${event.title}!`,
+          url: shareLink,
+        });
+        return;
+      } catch {
+        // User cancelled or share failed
+      }
+    }
+    // Fallback: Copy link
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareLink);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
 
-    try {
-      setIsSendingBotInvite(true);
-      canvasElement.toBlob(async (blob) => {
-        if (!blob) {
-          setIsSendingBotInvite(false);
-          return;
-        }
-
-        try {
-          await sendEventInvite({
-            eventId: event.id,
-            inviterName: activeInviter.first_name,
-            inviterUsername: activeInviter.username,
-            inviteeTelegramId: selectedInvitee.telegram_id,
-            inviteeUsername: selectedInvitee.username,
-            vibe: vibe,
-            imageBlob: blob,
-          });
-
-          setBotInviteSuccessMsg(`🎉 Bot invite & artwork sent to @${selectedInvitee.username || selectedInvitee.full_name}!`);
-          setTimeout(() => setBotInviteSuccessMsg(null), 4000);
-        } catch (err: any) {
-          alert(err.message || 'Failed to send bot invite.');
-        } finally {
-          setIsSendingBotInvite(false);
-        }
-      });
-    } catch (e) {
-      console.error('Error sending bot invite', e);
-      setIsSendingBotInvite(false);
+  const handleCopyLinkOnly = async () => {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareLink);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
     }
   };
 
@@ -160,31 +135,17 @@ export function InviteCustomizerModal({
               inviter={activeInviter}
               invitee={selectedInvitee}
               vibe={vibe}
-              onCanvasReady={setCanvasElement}
+              onCanvasReady={(canvas) => setCanvasElement(canvas)}
             />
           </div>
 
-          {/* Invitee Search Section */}
-          <div className="invite-section">
-            <label className="invite-label">Invite Someone (Optional)</label>
+          {/* User Search Input */}
+          <div className="invite-control-group">
+            <label className="invite-control-label">Invite Someone Specific (Optional)</label>
             {selectedInvitee ? (
               <div className="selected-invitee-chip">
-                <span className="selected-invitee-avatar">
-                  {selectedInvitee.full_name?.charAt(0).toUpperCase() || selectedInvitee.username?.charAt(0).toUpperCase() || 'U'}
-                </span>
-                <div className="selected-invitee-info">
-                  <span className="selected-invitee-name">
-                    {selectedInvitee.full_name || `@${selectedInvitee.username}`}
-                  </span>
-                  {selectedInvitee.username && selectedInvitee.full_name && (
-                    <span className="selected-invitee-handle">@{selectedInvitee.username}</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="remove-invitee-btn"
-                  onClick={handleClearInvitee}
-                >
+                <span>{selectedInvitee.full_name || selectedInvitee.username}</span>
+                <button type="button" onClick={handleClearInvitee}>
                   <X size={14} />
                 </button>
               </div>
@@ -193,53 +154,42 @@ export function InviteCustomizerModal({
                 <Search size={16} className="search-icon" />
                 <input
                   type="text"
-                  className="invite-search-input"
-                  placeholder="Search registered user by @username..."
+                  placeholder="Search user name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  className="invite-search-input"
                 />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className="clear-search-btn"
-                    onClick={() => setSearchQuery('')}
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-                {/* Dropdown Results */}
-                {searchQuery && searchResults.length > 0 && (
-                  <div className="invite-search-results">
-                    {searchResults.map((user) => (
-                      <div
-                        key={user.telegram_id}
-                        className="invite-search-result-item"
-                        onClick={() => handleSelectUser(user)}
-                      >
-                        <span className="result-avatar">
-                          {(user.full_name || user.username || 'U').charAt(0).toUpperCase()}
-                        </span>
-                        <div className="result-info">
-                          <span className="result-name">{user.full_name || user.username}</span>
-                          {user.username && <span className="result-handle">@{user.username}</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {searchQuery && searchResults.length === 0 && !isSearching && (
-                  <div className="invite-search-results empty">No registered user found</div>
-                )}
               </div>
             )}
+
+            {/* Search Dropdown */}
+            {searchResults.length > 0 && (
+              <div className="invite-search-results">
+                {searchResults.map((user) => (
+                  <div
+                    key={user.telegram_id}
+                    className="invite-search-item"
+                    onClick={() => handleSelectUser(user)}
+                  >
+                    <div className="avatar-placeholder">
+                      {(user.full_name || user.username || 'U')[0].toUpperCase()}
+                    </div>
+                    <div className="user-info">
+                      <span className="user-name">{user.full_name || user.username}</span>
+                      {user.username && <span className="user-handle">@{user.username}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {isSearching && <div className="searching-hint">Searching users...</div>}
           </div>
 
-          {/* Vibe Selector (Shown when invitee is selected) */}
+          {/* Vibe Selector */}
           {selectedInvitee && (
-            <div className="invite-section">
-              <label className="invite-label">Select Vibe & Intent</label>
-              <div className="vibe-selector-row">
+            <div className="invite-control-group">
+              <label className="invite-control-label">Card Theme & Vibe</label>
+              <div className="vibe-chips">
                 <button
                   type="button"
                   className={`vibe-chip ${vibe === 'date' ? 'active date' : ''}`}
@@ -247,15 +197,13 @@ export function InviteCustomizerModal({
                 >
                   <Heart size={14} /> Date 💖
                 </button>
-
                 <button
                   type="button"
                   className={`vibe-chip ${vibe === 'hangout' ? 'active hangout' : ''}`}
                   onClick={() => setVibe('hangout')}
                 >
-                  <Users size={14} /> Hangout 🍻
+                  <Beer size={14} /> Hangout 🍻
                 </button>
-
                 <button
                   type="button"
                   className={`vibe-chip ${vibe === 'casual' ? 'active casual' : ''}`}
@@ -270,36 +218,26 @@ export function InviteCustomizerModal({
           {copiedLink && (
             <div className="invite-toast">Invite link copied to clipboard!</div>
           )}
-
-          {botInviteSuccessMsg && (
-            <div className="invite-toast" style={{ background: '#22c55e', color: '#000' }}>
-              {botInviteSuccessMsg}
-            </div>
-          )}
         </div>
 
         {/* Footer Actions */}
         <div className="invite-modal-footer" style={{ flexDirection: 'column', gap: '8px' }}>
-          {selectedInvitee && (
-            <button
-              type="button"
-              className="invite-action-btn primary"
-              style={{ width: '100%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
-              onClick={handleSendBotInvite}
-              disabled={isSendingBotInvite}
-            >
-              <Send size={16} />
-              {isSendingBotInvite ? 'Sending Bot Message...' : `Send Bot Invite to @${selectedInvitee.username || selectedInvitee.full_name}`}
-            </button>
-          )}
+          <button
+            type="button"
+            className="invite-action-btn primary"
+            style={{ width: '100%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+            onClick={handleShare}
+          >
+            <Share2 size={16} /> Share Event Invite
+          </button>
 
           <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
             <button type="button" className="invite-action-btn secondary" style={{ flex: 1 }} onClick={handleDownloadImage}>
               <Download size={16} /> Save Image
             </button>
 
-            <button type="button" className="invite-action-btn secondary" style={{ flex: 1 }} onClick={handleShare}>
-              <Share2 size={16} /> Share Link
+            <button type="button" className="invite-action-btn secondary" style={{ flex: 1 }} onClick={handleCopyLinkOnly}>
+              <LinkIcon size={16} /> Copy Link
             </button>
           </div>
         </div>

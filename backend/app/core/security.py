@@ -82,37 +82,6 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-def verify_telegram_init_data(init_data: str, bot_token: str, max_age_seconds: int = 86400) -> Optional[dict]:
-    """Verify Telegram WebApp initData HMAC-SHA256 signature with replay protection."""
-    if not init_data or not bot_token:
-        return None
-
-    try:
-        parsed_data = dict(parse_qsl(init_data, keep_blank_values=True))
-        if "hash" not in parsed_data:
-            return None
-
-        data_hash = parsed_data.pop("hash")
-        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_data.items()))
-
-        secret_key = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
-        calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
-
-        if hmac.compare_digest(calculated_hash, data_hash):
-            # Replay protection: verify auth_date freshness (default 24h)
-            auth_date = int(parsed_data.get("auth_date", 0))
-            if auth_date > 0 and (time.time() - auth_date > max_age_seconds):
-                logger.warning(f"Telegram initData expired (auth_date={auth_date}) — rejecting replay attempt.")
-                return None
-
-            if "user" in parsed_data:
-                return json.loads(parsed_data["user"])
-            return parsed_data
-    except Exception as e:
-        logger.warning(f"Telegram initData verification error: {e}")
-    return None
-
-
 # ════════════════════════════════════════════════════════════════════════════════
 # FastAPI Reusable Auth Dependencies
 # ════════════════════════════════════════════════════════════════════════════════
@@ -140,20 +109,39 @@ async def require_api_key(x_api_key: str = Header(..., alias="X-Api-Key")) -> st
     return x_api_key
 
 
-async def require_telegram_user(
-    x_telegram_init_data: str = Header(..., alias="X-Telegram-Init-Data"),
+async def get_current_web_user(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ) -> dict:
-    """Validates Telegram WebApp initData from the X-Telegram-Init-Data header.
+    """Resolves web user identity from Authorization Bearer token, X-User-Id, or defaults to a guest user."""
+    # 1. JWT Bearer token
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        payload = decode_access_token(token)
+        if payload and "sub" in payload:
+            sub_val = payload["sub"]
+            numeric_id = int(sub_val) if str(sub_val).isdigit() else abs(hash(str(sub_val))) % (10**9)
+            return {
+                "id": sub_val,
+                "user_id": numeric_id,
+                "email": payload.get("email"),
+                "role": payload.get("role", "USER"),
+            }
 
-    Use as a dependency on Mini App user-action routes (RSVP, save, invite, etc.).
-    Returns the verified Telegram user dict (contains 'id', 'first_name', etc.)
-    or raises 401 if verification fails.
-    """
-    tg_user = verify_telegram_init_data(x_telegram_init_data, settings.TELEGRAM_BOT_TOKEN)
-    if not tg_user or "id" not in tg_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired Telegram initData.",
-        )
-    return tg_user
+    # 2. X-User-Id header
+    if x_user_id:
+        numeric_id = int(x_user_id) if str(x_user_id).isdigit() else abs(hash(str(x_user_id))) % (10**9)
+        return {
+            "id": x_user_id,
+            "user_id": numeric_id,
+            "role": "USER",
+        }
+
+    # 3. Default fallback user (e.g. guest web user)
+    return {
+        "id": "web-guest",
+        "user_id": 999888777,
+        "role": "USER",
+    }
+
 

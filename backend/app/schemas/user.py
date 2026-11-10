@@ -18,31 +18,20 @@ class InterestSchema(BaseModel):
 
 class UserProfileSchema(BaseModel):
     id: UUID = Field(..., description="Unique User UUID")
-    telegram_id: int = Field(..., description="Telegram numeric User ID")
+    telegram_id: Optional[int] = Field(None, description="User numeric ID")
     full_name: Optional[str] = Field(None, description="User full name")
-    username: Optional[str] = Field(None, description="Telegram @username")
+    username: Optional[str] = Field(None, description="User username")
     phone_number: Optional[str] = Field(None, description="Phone number")
     preferred_language: str = Field("en", description="Preferred UI language")
     role: str = Field("USER", description="User role (USER, ORGANIZER, ADMIN)")
-    is_registered: bool = Field(..., description="True if phone number is registered")
+    is_registered: bool = Field(True, description="True if profile is active")
     interests: List[InterestSchema] = Field(default=[], description="User's selected interests")
 
     class Config:
         from_attributes = True
 
 
-class BotStartRequest(BaseModel):
-    telegram_id: int = Field(..., description="Telegram numeric User ID")
-    full_name: Optional[str] = Field(None, description="Telegram User full name")
-    username: Optional[str] = Field(None, description="Telegram username without @")
-    preferred_language: str = Field("en", description="Preferred language code")
-
-
-class PhoneNumberUpdateRequest(BaseModel):
-    telegram_id: int = Field(..., description="Telegram numeric User ID")
-    phone_number: str = Field(..., description="Phone number shared via Telegram contact button")
-
-
 class InterestSelectionRequest(BaseModel):
-    telegram_id: int = Field(..., description="Telegram numeric User ID")
+    telegram_id: Optional[int] = Field(None, description="User numeric ID")
+    user_id: Optional[str] = Field(None, description="User ID string or UUID")
     interest_slugs: List[str] = Field(..., description="List of selected interest slugs (e.g. ['music', 'food'])")

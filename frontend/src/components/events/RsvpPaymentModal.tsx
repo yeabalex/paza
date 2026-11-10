@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Upload, CreditCard, User, FileText, ExternalLink } from 'lucide-react';
-import type { EventItem, RsvpUser, TelegramUser } from '../../types';
+import type { EventItem, RsvpUser, User as AppUser } from '../../types';
 import type { EventDetailItem } from '../../api/events';
 import { markGoing } from '../../api/events';
-import { openTelegramInAppUrl } from '../../utils/telegram';
+import { openExternalUrl } from '../../utils/telegram';
 
 interface RsvpPaymentModalProps {
   event: EventItem | EventDetailItem;
-  telegramUser: TelegramUser | null;
+  telegramUser: AppUser | null;
   isLoading?: boolean;
   onClose: () => void;
   onSuccess: (rsvp: RsvpUser) => void;
@@ -75,12 +75,12 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const tgInitData = window.Telegram?.WebApp?.initData || '';
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('paza_user_id') : null;
       const res = await fetch('/api/v1/events/upload-receipt', {
         method: 'POST',
         headers: {
           'ngrok-skip-browser-warning': 'true',
-          ...(tgInitData ? { 'X-Telegram-Init-Data': tgInitData } : {}),
+          ...(userId ? { 'X-User-Id': userId } : {}),
         },
         body: formData,
       });
@@ -104,15 +104,16 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!telegramUser) {
-      setErrorMsg('Telegram user profile required');
-      return;
-    }
 
     if (!fullName.trim()) {
       setErrorMsg('Please provide your full name');
       return;
     }
+
+    const effectiveUser: AppUser = telegramUser || {
+      id: Math.floor(100000000 + Math.random() * 900000000),
+      first_name: fullName.trim() || 'Guest User',
+    };
 
     setIsSubmitting(true);
     setErrorMsg(null);
@@ -120,7 +121,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
     try {
       const success = await markGoing(
         event.id,
-        telegramUser,
+        effectiveUser,
         message.trim() || undefined,
         fullName.trim(),
         transactionId.trim() || undefined,
@@ -130,11 +131,11 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
 
       if (success) {
         onSuccess({
-          telegram_id: telegramUser.id,
-          first_name: telegramUser.first_name,
+          telegram_id: effectiveUser.id,
+          first_name: effectiveUser.first_name,
           full_name: fullName.trim(),
-          username: telegramUser.username,
-          photo_url: telegramUser.photo_url,
+          username: effectiveUser.username,
+          photo_url: effectiveUser.photo_url,
           message: message.trim() || undefined,
           transaction_id: transactionId.trim() || undefined,
           screenshot_url: screenshotUrl || undefined,
@@ -149,7 +150,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
       } else {
         setErrorMsg('Failed to submit RSVP. Please try again.');
       }
-    } catch (err) {
+    } catch {
       setErrorMsg('An error occurred during submission.');
     } finally {
       setIsSubmitting(false);
@@ -180,7 +181,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
     const handleOpenLink = (e: React.MouseEvent) => {
       e.preventDefault();
       if (postUrl) {
-        openTelegramInAppUrl(postUrl);
+        openExternalUrl(postUrl);
       }
     };
 

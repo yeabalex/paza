@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { EventItem, TelegramUser } from '../../types';
+import type { EventItem, User } from '../../types';
 import type { UserSearchResult } from '../../api/users';
 
 export type VibeType = 'casual' | 'date' | 'hangout';
 
 export interface InviteCardCanvasProps {
   event: EventItem;
-  inviter: TelegramUser;
+  inviter: User;
   invitee: UserSearchResult | null;
   vibe: VibeType;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -142,7 +142,7 @@ export function InviteCardCanvas({
     let line1 = '';
     let line2 = '';
 
-    for (let w of words) {
+    for (const w of words) {
       if (ctx.measureText(line1 + w + ' ').width < W - 140) {
         line1 += w + ' ';
       } else {

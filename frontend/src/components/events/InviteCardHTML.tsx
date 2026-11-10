@@ -1,13 +1,13 @@
 import { useRef, useEffect } from 'react';
 import html2canvas from 'html2canvas';
-import type { EventItem, TelegramUser } from '../../types';
+import type { EventItem, User } from '../../types';
 import type { UserSearchResult } from '../../api/users';
 
 export type VibeType = 'casual' | 'date' | 'hangout';
 
 export interface InviteCardHTMLProps {
   event: EventItem;
-  inviter: TelegramUser;
+  inviter: User;
   invitee: UserSearchResult | null;
   vibe: VibeType;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;

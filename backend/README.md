@@ -1,6 +1,6 @@
-# Paza Event Bot Backend
+# Paza Backend API
 
-FastAPI asynchronous backend server and automated ingestion engine for Paza Event Bot.
+FastAPI asynchronous backend server and automated ingestion engine for Paza Web App.
 
 > **Note**: For complete documentation, architecture diagrams, and full-stack setup instructions, please refer to the [Root README](../README.md).
 

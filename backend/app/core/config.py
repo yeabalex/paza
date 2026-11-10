@@ -42,10 +42,8 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     PIPELINE_API_KEY: str = ""
 
-    # Telegram Bot & Mini App Settings
-    TELEGRAM_BOT_TOKEN: str = ""
-    MINI_APP_URL: str = ""
-    ADMIN_TELEGRAM_CHAT_ID: str = ""
+    # Web App Settings
+    WEB_APP_URL: str = "http://localhost:3000"
     ORGANIZER_PORTAL_URL: str = "https://paza-organizers.netlify.app"
 
     # Scraper Session Credentials

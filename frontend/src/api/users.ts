@@ -7,15 +7,11 @@ export async function fetchInterests(): Promise<Interest[]> {
 }
 
 export async function fetchUserProfile(
-  telegramId: number,
-  initData?: string,
+  userId: number | string,
   username?: string,
   fullName?: string
 ): Promise<UserProfile | null> {
-  let url = `/users/me?telegram_id=${telegramId}`;
-  if (initData) {
-    url += `&init_data=${encodeURIComponent(initData)}`;
-  }
+  let url = `/users/me?user_id=${encodeURIComponent(String(userId))}`;
   if (username) {
     url += `&username=${encodeURIComponent(username)}`;
   }
@@ -25,11 +21,13 @@ export async function fetchUserProfile(
   return await apiFetch<UserProfile>(url);
 }
 
-export async function updateUserInterests(telegramId: number, interestSlugs: string[]): Promise<boolean> {
+export async function updateUserInterests(userId: number | string, interestSlugs: string[]): Promise<boolean> {
+  const numericId = typeof userId === 'number' ? userId : parseInt(String(userId), 10);
   const res = await apiFetch<{ message: string }>('/users/interests', {
     method: 'POST',
     body: JSON.stringify({
-      telegram_id: telegramId,
+      telegram_id: !isNaN(numericId) ? numericId : undefined,
+      user_id: String(userId),
       interest_slugs: interestSlugs,
     }),
   });
@@ -37,6 +35,7 @@ export async function updateUserInterests(telegramId: number, interestSlugs: str
 }
 
 export interface UserSearchResult {
+  id?: string;
   telegram_id: number;
   full_name?: string;
   username?: string;
@@ -48,4 +47,3 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
   const data = await apiFetch<UserSearchResult[]>(`/users/search?query=${encodeURIComponent(query)}`);
   return data || [];
 }
-

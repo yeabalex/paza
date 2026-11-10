@@ -412,17 +412,7 @@ async def create_organizer_event(
                 f"Tap below to RSVP & view details in Mini App!"
             )
 
-            import asyncio
-            from app.services.bot.broadcaster import broadcast_to_all_users
-
-            asyncio.create_task(
-                broadcast_to_all_users(
-                    text=msg_text,
-                    image_url=event.image_url,
-                    button_text="🚀 View & RSVP in Mini App",
-                    mini_app_params=f"event_id={event_id_str}"
-                )
-            )
+            logger.info(f"New organizer event published: {event.title} by {org_name}")
         except Exception as b_err:
             logger.error(f"Failed to initiate organizer event broadcast: {b_err}")
 

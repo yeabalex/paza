@@ -598,7 +598,7 @@
   gap: 8px;
   padding: 13px 26px;
   border-radius: var(--radius-full);
-  background: var(--color-telegram);
+  background: var(--color-social);
   color: var(--text-primary);
   text-decoration: none;
   font-weight: 700;

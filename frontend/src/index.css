@@ -20,7 +20,7 @@
   --accent-on: #000000;          /* text color ON accent backgrounds */
 
   /* Semantic */
-  --color-telegram: #0088cc;
+  --color-social: #3b82f6;
   --color-free: var(--accent);
   --color-free-bg: var(--accent-soft);
   --color-paid: #D4A76A;

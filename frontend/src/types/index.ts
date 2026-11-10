@@ -8,7 +8,8 @@ export interface Interest {
 
 export interface UserProfile {
   id: string;
-  telegram_id: number;
+  telegram_id?: number;
+  user_id?: string | number;
   full_name?: string;
   username?: string;
   phone_number?: string;
@@ -46,6 +47,7 @@ export interface EventItem {
 
 export interface RsvpUser {
   telegram_id: number;
+  user_id?: string | number;
   first_name: string;
   full_name?: string;
   username?: string;
@@ -57,10 +59,14 @@ export interface RsvpUser {
   created_at?: string;
 }
 
-export interface TelegramUser {
+export interface User {
   id: number;
   first_name: string;
   last_name?: string;
   username?: string;
   photo_url?: string;
+  phone_number?: string;
 }
+
+// Backwards-compatibility alias
+export type TelegramUser = User;

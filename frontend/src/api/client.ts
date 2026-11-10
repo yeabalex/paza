@@ -1,7 +1,8 @@
 const API_BASE_URL = '/api/v1';
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T | null> {
-  const tgInitData = (typeof window !== 'undefined' && window.Telegram?.WebApp?.initData) || '';
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('paza_user_id') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('paza_token') : null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -15,7 +16,8 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'ngrok-skip-browser-warning': 'true',
-          ...(tgInitData ? { 'X-Telegram-Init-Data': tgInitData } : {}),
+          ...(userId ? { 'X-User-Id': userId } : {}),
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           ...options.headers,
         },
       });

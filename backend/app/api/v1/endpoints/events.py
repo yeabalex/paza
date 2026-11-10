@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import require_telegram_user, require_api_key
+from app.core.security import get_current_web_user, require_api_key
 from app.db.session import get_db
 from app.services.cache.redis_event_storage import RedisEventStorage
 from app.services.event.event_repository import EventRepository
@@ -205,25 +205,24 @@ async def list_rsvps(
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# PROTECTED USER-ACTION ENDPOINTS (Telegram initData required)
+# USER-ACTION ENDPOINTS (Web User)
 # ════════════════════════════════════════════════════════════════════════════════
 
 @router.post(
     "/save-scraped",
     summary="Save Scraped Event to PostgreSQL DB",
-    description="Stores a scraped event as raw JSON in permanent PostgreSQL storage for a user. Requires X-Telegram-Init-Data header."
+    description="Stores a scraped event as raw JSON in permanent PostgreSQL storage for a user."
 )
 async def save_scraped_event(
     payload: SaveScrapedEventRequest,
-    tg_user: dict = Depends(require_telegram_user),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        # Use verified telegram_id from initData
-        verified_tg_id = int(tg_user["id"])
+        target_id = payload.telegram_id or current_user.get("user_id", 999888777)
         await EventRepository.save_scraped_event(
             db=db,
-            telegram_id=verified_tg_id,
+            telegram_id=target_id,
             event_id=payload.event_id,
             event_data=payload.event_data,
         )
@@ -240,18 +239,17 @@ async def save_scraped_event(
 @router.delete(
     "/save-scraped",
     summary="Un-save Scraped Event from PostgreSQL DB",
-    description="Requires X-Telegram-Init-Data header.",
 )
 async def remove_saved_scraped_event(
     event_id: str = Query(...),
-    tg_user: dict = Depends(require_telegram_user),
+    telegram_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        # Use verified telegram_id from initData
-        verified_tg_id = int(tg_user["id"])
+        target_id = telegram_id or current_user.get("user_id", 999888777)
         removed = await EventRepository.remove_saved_scraped_event(
-            db=db, telegram_id=verified_tg_id, event_id=event_id
+            db=db, telegram_id=target_id, event_id=event_id
         )
         if removed:
             return {"status": "success", "message": "Event removed from DB"}
@@ -269,15 +267,15 @@ async def remove_saved_scraped_event(
     "/saved-scraped",
     response_model=List[dict],
     summary="Get User's Saved Scraped Events from PostgreSQL DB",
-    description="Requires X-Telegram-Init-Data header.",
 )
 async def get_saved_scraped_events(
-    tg_user: dict = Depends(require_telegram_user),
+    telegram_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        verified_tg_id = int(tg_user["id"])
-        return await EventRepository.get_saved_scraped_events(db=db, telegram_id=verified_tg_id)
+        target_id = telegram_id or current_user.get("user_id", 999888777)
+        return await EventRepository.get_saved_scraped_events(db=db, telegram_id=target_id)
     except Exception as e:
         logger.error(f"Failed to fetch saved scraped events: {e}")
         raise HTTPException(
@@ -290,15 +288,15 @@ async def get_saved_scraped_events(
     "/user-rsvps",
     response_model=List[dict],
     summary="Get User's RSVP'd Events from PostgreSQL DB",
-    description="Requires X-Telegram-Init-Data header.",
 )
 async def get_user_rsvps(
-    tg_user: dict = Depends(require_telegram_user),
+    telegram_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        verified_tg_id = int(tg_user["id"])
-        return await EventRepository.get_user_rsvps(db=db, redis_storage=redis_event_storage, telegram_id=verified_tg_id)
+        target_id = telegram_id or current_user.get("user_id", 999888777)
+        return await EventRepository.get_user_rsvps(db=db, redis_storage=redis_event_storage, telegram_id=target_id)
     except Exception as e:
         logger.error(f"Failed to fetch user rsvp events: {e}")
         raise HTTPException(
@@ -314,14 +312,16 @@ async def get_user_rsvps(
 @router.post(
     "/rsvp",
     summary="Mark user as Going to an event",
-    description="Creates or updates an RSVP for the given event. Requires X-Telegram-Init-Data header.",
+    description="Creates or updates an RSVP for the given event.",
 )
 async def mark_going(
     body: RsvpRequest,
-    tg_user: dict = Depends(require_telegram_user),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
+        if not body.telegram_id:
+            body.telegram_id = current_user.get("user_id", 999888777)
         await EventRepository.mark_rsvp(db=db, body=body)
         return {"status": "success", "message": "RSVP saved"}
     except Exception as e:
@@ -336,17 +336,17 @@ async def mark_going(
 @router.delete(
     "/rsvp",
     summary="Remove user's RSVP from an event",
-    description="Requires X-Telegram-Init-Data header.",
 )
 async def remove_going(
     event_id: str = Query(...),
-    tg_user: dict = Depends(require_telegram_user),
+    telegram_id: Optional[int] = Query(None),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        verified_tg_id = int(tg_user["id"])
+        target_id = telegram_id or current_user.get("user_id", 999888777)
         removed = await EventRepository.remove_rsvp(
-            db=db, event_id=event_id, telegram_id=verified_tg_id
+            db=db, event_id=event_id, telegram_id=target_id
         )
         if removed:
             return {"status": "success", "message": "RSVP removed"}
@@ -363,11 +363,11 @@ async def remove_going(
 @router.post(
     "/upload-receipt",
     summary="Upload RSVP Payment Receipt Screenshot",
-    description="Uploads RSVP payment receipt screenshot to Cloudinary / R2 CDN. Requires X-Telegram-Init-Data header."
+    description="Uploads RSVP payment receipt screenshot to Cloudinary / R2 CDN."
 )
 async def upload_rsvp_receipt(
     file: UploadFile = File(...),
-    tg_user: dict = Depends(require_telegram_user),
+    current_user: dict = Depends(get_current_web_user),
 ):
     try:
         if cloudinary_storage_service._is_configured():
@@ -385,18 +385,18 @@ async def upload_rsvp_receipt(
 
 @router.post(
     "/send-invite",
-    summary="Send Event Invite with Artwork via Telegram Bot",
-    description="Uploads generated invite artwork image and sends a photo message via Telegram bot to the invited user. Requires X-Telegram-Init-Data header."
+    summary="Generate Event Invite with Artwork for Web Sharing",
+    description="Uploads generated invite artwork image and creates shareable web invite link."
 )
 async def send_event_invite(
     event_id: str = Form(...),
     inviter_name: str = Form(...),
     inviter_username: Optional[str] = Form(None),
-    invitee_telegram_id: int = Form(...),
+    invitee_telegram_id: Optional[int] = Form(None),
     invitee_username: Optional[str] = Form(None),
     vibe: Optional[str] = Form("casual"),
     image: Optional[UploadFile] = File(None),
-    tg_user: dict = Depends(require_telegram_user),
+    current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
@@ -419,76 +419,26 @@ async def send_event_invite(
             except Exception as upload_err:
                 logger.error(f"Failed to upload invite artwork image: {upload_err}")
 
-        # 3. Build WebApp Deep Link
-        mini_app_url = settings.MINI_APP_URL.rstrip('/')
-        event_link = f"{mini_app_url}/?event_id={urllib.parse.quote(clean_id)}"
-
-        display_inviter = f"@{inviter_username}" if inviter_username else inviter_name
-
-        vibe_emoji = "💖" if vibe == "date" else "🍻" if vibe == "hangout" else "✨"
-        vibe_text = (
-            "would love to go on a date with you to this event!" if vibe == "date"
-            else "wants to hangout with you at this event!" if vibe == "hangout"
-            else "invited you to check out this event!"
-        )
-
-        caption_text = (
-            f"🎉 <b>{display_inviter}</b> {vibe_text} {vibe_emoji}\n\n"
-            f"📍 <b>Event:</b> <b>{event_title}</b>\n"
-            f"🏛️ <b>Venue:</b> {venue_name}\n\n"
-            f"Tap the button below to view details and RSVP!"
-        )
-
-        bot_token = settings.TELEGRAM_BOT_TOKEN
-        reply_markup = {
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "✨ View Event & Join",
-                        "web_app": {"url": event_link}
-                    }
-                ]
-            ]
-        }
-
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            if image_url:
-                tg_url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
-                payload = {
-                    "chat_id": invitee_telegram_id,
-                    "photo": image_url,
-                    "caption": caption_text,
-                    "parse_mode": "HTML",
-                    "reply_markup": reply_markup
-                }
-                res = await client.post(tg_url, json=payload)
-            else:
-                tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-                payload = {
-                    "chat_id": invitee_telegram_id,
-                    "text": caption_text,
-                    "parse_mode": "HTML",
-                    "reply_markup": reply_markup
-                }
-                res = await client.post(tg_url, json=payload)
-
-            if not res.is_success:
-                logger.error(f"Telegram API sendPhoto/sendMessage failed ({res.status_code}): {res.text}")
-                if "bot was blocked" in res.text or "chat not found" in res.text:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Cannot send message to @{invitee_username or invitee_telegram_id} — the user has not started @AddisEventBot on Telegram yet."
-                    )
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Telegram notification error: {res.text}"
-                )
+        # 3. Build Web App Share Link
+        web_app_url = settings.WEB_APP_URL.rstrip('/')
+        invite_link = f"{web_app_url}/?event_id={urllib.parse.quote(clean_id)}"
 
         return {
             "status": "success",
-            "message": f"Invite artwork sent to @{invitee_username or invitee_telegram_id} on Telegram!",
-            "image_url": image_url
+            "message": f"Invite artwork ready for {inviter_name}!",
+            "invite_url": invite_link,
+            "image_url": image_url,
+            "event_title": event_title,
+            "venue_name": venue_name
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error sending event invite: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate invite: {str(e)}"
+        )
     except HTTPException:
         raise
     except Exception as e:

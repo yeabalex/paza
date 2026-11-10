@@ -1,6 +1,6 @@
-# Paza Event Telegram Mini App
+# Paza Web App
 
-React 19 + TypeScript + Vite application designed to run embedded inside Telegram as a WebApp for event discovery, RSVPs, bookmarks, and dynamic invite creation.
+React 19 + TypeScript + Vite web application for event discovery, RSVPs, bookmarks, and dynamic invite creation.
 
 > **Note**: For complete documentation, architecture diagrams, and full-stack setup instructions, please refer to the [Root README](../README.md).
 

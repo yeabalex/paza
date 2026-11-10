@@ -645,44 +645,10 @@ class EventRepository:
         mini_app_url = settings.MINI_APP_URL.rstrip('/')
         verify_url = f"{mini_app_url}/?verify_event_id={clean_id}&ticket_code={rsvp.ticket_code}"
 
-        # Send Telegram Bot Message
-        try:
-            bot_token = settings.TELEGRAM_BOT_TOKEN
-            msg_text = (
-                f"<b>PAZA EVENTS — ATTENDANCE CONFIRMED!</b>\n\n"
-                f"🎉 Your registration for <b>{event_title}</b> has been approved by the organizer!\n\n"
-                f"🎫 <b>Ticket Pass Code:</b> <code>{rsvp.ticket_code}</code>\n\n"
-                f"Tap the button below to view your digital ticket pass for entry authentication at the door."
-            )
-            tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            payload = {
-                "chat_id": telegram_id,
-                "text": msg_text,
-                "parse_mode": "HTML",
-                "reply_markup": {
-                    "inline_keyboard": [
-                        [
-                            {
-                                "text": "🎫 View Entry Ticket Pass",
-                                "web_app": {"url": verify_url}
-                            }
-                        ]
-                    ]
-                }
-            }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(tg_url, json=payload)
-                if res.is_success:
-                    logger.info(f"Successfully sent Telegram ticket message to user [{telegram_id}]")
-                else:
-                    logger.error(f"Telegram API error ({res.status_code}) sending ticket to [{telegram_id}]: {res.text}")
-        except Exception as e:
-            logger.error(f"Failed to send Telegram ticket message to {telegram_id}: {e}")
-
         return {
             "ticket_code": rsvp.ticket_code,
             "status": rsvp.status,
-            "message": "Attendance confirmed and Telegram ticket sent."
+            "message": "Attendance confirmed."
         }
 
     @staticmethod

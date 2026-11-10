@@ -1,4 +1,4 @@
-# Multi-stage production build for Paza Telegram Mini App (React + Vite)
+# Multi-stage production build for Paza Web App (React + Vite)
 FROM node:20-alpine AS builder
 
 WORKDIR /app

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { UserProfile, Interest, EventItem, TelegramUser } from './types';
+import type { UserProfile, Interest, EventItem, User } from './types';
 import { fetchInterests, fetchUserProfile, updateUserInterests } from './api/users';
 import {
   fetchExploreEvents,
@@ -16,18 +16,11 @@ import { CategoryScroll } from './components/events/CategoryScroll';
 import { SearchBar } from './components/events/SearchBar';
 import { ExplorePostCard } from './components/events/ExplorePostCard';
 import { InterestSelector } from './components/onboarding/InterestSelector';
-import { RedirectScreen } from './components/unregistered/RedirectScreen';
 import { EventDetail } from './components/events/EventDetail';
 import { TicketPassScreen } from './components/events/TicketPassScreen';
 import { Calendar, Bookmark, Ticket } from 'lucide-react';
 
 import './App.css';
-
-declare global {
-  interface Window {
-    Telegram?: any;
-  }
-}
 
 const DEFAULT_INTERESTS: Interest[] = [
   { id: '1', slug: 'music', name_en: 'Music & Concerts', name_am: 'ሙዚቃና ኮንሰርት', icon_name: '🎵' },
@@ -60,7 +53,7 @@ export function App() {
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [viewState, setViewState] = useState<'loading' | 'onboarding' | 'feed' | 'unregistered'>('loading');
+  const [viewState, setViewState] = useState<'loading' | 'onboarding' | 'feed'>('loading');
   const [activeTab, setActiveTab] = useState<string>('home');
   const [events, setEvents] = useState<EventItem[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
@@ -69,62 +62,50 @@ export function App() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [verifyTicketParams, setVerifyTicketParams] = useState<{ eventId: string; ticketCode: string } | null>(null);
 
-  const [unregisteredReason, setUnregisteredReason] = useState<'outside_telegram' | 'unregistered_phone'>('outside_telegram');
   const [timeframe, setTimeframe] = useState<'upcoming' | 'past'>('upcoming');
 
   // Ref for infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.ready();
-      window.Telegram.WebApp.expand();
-    }
-
     const initApp = async () => {
       try {
-        const initData = window.Telegram?.WebApp?.initData;
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
         const urlParams = new URLSearchParams(window.location.search);
-        const tgIdParam = urlParams.get('tg_id');
-        const isDevParam = urlParams.get('dev') === 'true';
-
-        const verifyEventId = urlParams.get('verify_event_id') || urlParams.get('event_id');
+        const eventIdParam = urlParams.get('event_id');
+        const verifyEventId = urlParams.get('verify_event_id') || eventIdParam;
         const ticketCodeParam = urlParams.get('ticket_code');
 
         if (verifyEventId && ticketCodeParam) {
           setVerifyTicketParams({ eventId: verifyEventId, ticketCode: ticketCodeParam });
         }
 
-        // Detect if opened in a standard web browser outside Telegram (unless verifying ticket)
-        const isOutsideTelegram = !initData && !tgUser && !tgIdParam && !isDevParam && !(verifyEventId && ticketCodeParam);
-        if (isOutsideTelegram) {
-          setUnregisteredReason('outside_telegram');
-          setViewState('unregistered');
-          return;
+        // Initialize or resolve persistent web user ID
+        let storedUserId = localStorage.getItem('paza_user_id');
+        if (!storedUserId) {
+          storedUserId = String(Math.floor(100000000 + Math.random() * 900000000));
+          localStorage.setItem('paza_user_id', storedUserId);
         }
+        const numericUserId = parseInt(storedUserId, 10);
+        const storedName = localStorage.getItem('paza_user_name') || 'Web User';
+        const storedUsername = localStorage.getItem('paza_username') || undefined;
 
-        const telegramId = tgUser?.id || (tgIdParam ? parseInt(tgIdParam, 10) : 999888777);
-
-        // Build TelegramUser object for RSVP feature
-        setTelegramUser({
-          id: telegramId,
-          first_name: tgUser?.first_name || 'User',
-          last_name: tgUser?.last_name,
-          username: tgUser?.username,
-          photo_url: tgUser?.photo_url,
-        });
+        const webUser: User = {
+          id: numericUserId,
+          first_name: storedName,
+          username: storedUsername,
+        };
+        setCurrentUser(webUser);
 
         // Fast-path: Check local storage persistence synchronously for this user
         const hasOnboardedLocally =
-          localStorage.getItem(`onboarding_completed_${telegramId}`) === 'true';
+          localStorage.getItem(`onboarding_completed_${storedUserId}`) === 'true';
 
         let savedLocalSlugs: string[] = [];
         try {
-          const raw = localStorage.getItem(`selected_interests_${telegramId}`);
+          const raw = localStorage.getItem(`selected_interests_${storedUserId}`);
           if (raw) savedLocalSlugs = JSON.parse(raw);
         } catch (e) {
           console.error('Error parsing local interests', e);
@@ -142,11 +123,9 @@ export function App() {
         }
 
         // Load Interests & Profile concurrently in parallel in background
-        const currentFullName = [tgUser?.first_name, tgUser?.last_name].filter(Boolean).join(' ') || undefined;
-
         const [fetchedInterests, profile] = await Promise.all([
           fetchInterests().catch(() => [] as Interest[]),
-          fetchUserProfile(telegramId, initData || undefined, tgUser?.username || undefined, currentFullName).catch(() => null),
+          fetchUserProfile(storedUserId, storedUsername, storedName).catch(() => null),
         ]);
 
         if (fetchedInterests && fetchedInterests.length > 0) {
@@ -161,16 +140,12 @@ export function App() {
             setSelectedSlugs(effectiveSlugs);
           }
 
-          if (!profile.is_registered) {
-            setUnregisteredReason('unregistered_phone');
-            setViewState('unregistered');
-          } else if (effectiveSlugs.length > 0 || hasOnboardedLocally) {
+          if (effectiveSlugs.length > 0 || hasOnboardedLocally) {
             setViewState('feed');
           } else {
             setViewState('onboarding');
           }
         } else {
-          // Fallback if backend profile API is unreachable
           if (!hasOnboardedLocally && savedLocalSlugs.length === 0) {
             setViewState('onboarding');
           } else {
@@ -192,7 +167,7 @@ export function App() {
       setIsLoadingEvents(true);
       setHasMore(true);
       setSelectedEvent(null);
-      const tgId = user?.telegram_id || 999888777;
+      const userId = user?.telegram_id || (currentUser ? currentUser.id : 999888777);
 
       // Fetch dynamic categories
       fetchCategories().then((cats) => {
@@ -202,17 +177,17 @@ export function App() {
       });
 
       if (activeTab === 'saved') {
-        const savedEvts = await fetchSavedScrapedEvents(tgId);
+        const savedEvts = await fetchSavedScrapedEvents(userId);
         setEvents(savedEvts);
         setHasMore(false);
       } else if (activeTab === 'tickets') {
-        const rsvpEvts = await fetchUserRsvps(tgId);
+        const rsvpEvts = await fetchUserRsvps(userId);
         setEvents(rsvpEvts);
         setHasMore(false);
       } else {
-        const exploreEvts = await fetchExploreEvents(activeCategory, 0, timeframe);
-        setEvents(exploreEvts);
-        setHasMore(exploreEvts.length >= 7);
+        const initialEvents = await fetchExploreEvents(activeCategory, 0, timeframe);
+        setEvents(initialEvents);
+        setHasMore(initialEvents.length >= 15);
       }
       setIsLoadingEvents(false);
     };
@@ -220,33 +195,44 @@ export function App() {
     if (viewState === 'feed') {
       loadFirstPage();
     }
-  }, [activeCategory, activeTab, viewState, user?.telegram_id, timeframe]);
+  }, [activeCategory, activeTab, timeframe, viewState, user, currentUser]);
 
-  // Load more on scroll (IntersectionObserver)
+  const loadNextPage = async () => {
+    if (isLoadingMore || !hasMore || activeTab !== 'home') return;
+    setIsLoadingMore(true);
+    const nextPage = Math.floor(events.length / 15);
+    const newEvents = await fetchExploreEvents(activeCategory, nextPage, timeframe);
+    if (newEvents.length < 15) {
+      setHasMore(false);
+    }
+    setEvents((prev) => {
+      const existingIds = new Set(prev.map((e) => e.id));
+      const filtered = newEvents.filter((e) => !existingIds.has(e.id));
+      return [...prev, ...filtered];
+    });
+    setIsLoadingMore(false);
+  };
+
+  // Infinite scroll observer: trigger loadNextPage when sentinel is in view
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore || isLoadingMore || activeTab !== 'home') return;
+    if (activeTab !== 'home' || !hasMore || isLoadingMore || isLoadingEvents) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
-          setIsLoadingMore(true);
-          fetchExploreEvents(activeCategory, events.length, timeframe).then((moreEvts) => {
-            if (moreEvts.length === 0) {
-              setHasMore(false);
-            } else {
-              setEvents((prev) => [...prev, ...moreEvts]);
-              setHasMore(moreEvts.length >= 7);
-            }
-            setIsLoadingMore(false);
-          });
+          loadNextPage();
         }
       },
-      { rootMargin: '200px' }
+      { threshold: 0.1 }
     );
 
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, isLoadingMore, events.length, activeCategory, activeTab, timeframe]);
+    const el = sentinelRef.current;
+    if (el) observer.observe(el);
+
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [hasMore, isLoadingMore, isLoadingEvents, activeTab, events.length, activeCategory, timeframe]);
 
   const toggleInterest = (slug: string) => {
     setSelectedSlugs((prev) =>
@@ -263,19 +249,18 @@ export function App() {
   };
 
   const handleSaveInterests = async () => {
-    const tgId = user?.telegram_id || 999888777;
-    await updateUserInterests(tgId, selectedSlugs);
+    const userId = user?.telegram_id || (currentUser ? currentUser.id : 999888777);
+    await updateUserInterests(userId, selectedSlugs);
 
-    // Save completion flags to localStorage for this user
-    localStorage.setItem(`onboarding_completed_${tgId}`, 'true');
-    localStorage.setItem(`selected_interests_${tgId}`, JSON.stringify(selectedSlugs));
+    localStorage.setItem(`onboarding_completed_${userId}`, 'true');
+    localStorage.setItem(`selected_interests_${userId}`, JSON.stringify(selectedSlugs));
 
     setViewState('feed');
   };
 
   const toggleJoin = (eventId: string) => {
     const targetEvent = events.find((e) => e.id === eventId);
-    const tgId = user?.telegram_id || 999888777;
+    const userId = user?.telegram_id || (currentUser ? currentUser.id : 999888777);
 
     setJoinedEvents((prev) => {
       const isJoined = !prev[eventId];
@@ -283,9 +268,9 @@ export function App() {
       // Persist to PostgreSQL database
       if (targetEvent) {
         if (isJoined) {
-          saveScrapedEvent(tgId, targetEvent);
+          saveScrapedEvent(userId, targetEvent);
         } else {
-          removeSavedScrapedEvent(tgId, eventId);
+          removeSavedScrapedEvent(userId, eventId);
         }
       }
 
@@ -350,10 +335,6 @@ export function App() {
     );
   }
 
-  if (viewState === 'unregistered') {
-    return <RedirectScreen reason={unregisteredReason} />;
-  }
-
   if (viewState === 'onboarding') {
     return (
       <InterestSelector
@@ -374,7 +355,7 @@ export function App() {
         isJoined={!!joinedEvents[selectedEvent.id]}
         onBack={() => setSelectedEvent(null)}
         onToggleJoin={toggleJoin}
-        telegramUser={telegramUser}
+        telegramUser={currentUser}
       />
     );
   }
@@ -394,9 +375,8 @@ export function App() {
         </div>
       ) : (
         <>
-          {/* ── Header Before Filters with Upcoming/Past Switcher ── */}
           <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px', margin: 0 }}>
+            <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', margin: 0 }}>
               {timeframe === 'past' ? 'Past Events' : 'Explore Events'}
             </h1>
             <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '3px', gap: '2px' }}>
