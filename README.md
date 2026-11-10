@@ -1,171 +1,79 @@
-# Paza Monorepo
+# Paza Monorepo (Turborepo)
 
-Welcome to the **Paza** monorepo, containing both the backend services and the Telegram Mini App frontend for discovering, RSVPing to, and sharing events in Addis Ababa.
+High-performance Turborepo monorepo for **Paza**, containing both the FastAPI backend services and the Telegram Mini App frontend (React 19 + Vite).
 
 ---
 
-## Repository Structure
+## Architecture & Workspaces
 
 ```
 paza/
-├── backend/                  # FastAPI backend server, bot runtime, and ingestion pipeline
-│   ├── app/                  # FastAPI endpoints, database models, schemas, and services
-│   ├── terraform/            # Infrastructure as Code (dev & prod AWS deployments)
-│   ├── tests/                # Backend unit and integration test suite
-│   ├── Dockerfile            # Container build specification
-│   ├── docker-compose.yml    # Standalone backend service composition
+├── .github/
+│   └── workflows/
+│       └── deploy.yml        # Root CI/CD pipeline (Turbo lint/build + Docker images build/push + EC2 deploy)
+├── backend/                  # FastAPI backend server, Telegram bot poller, and ingestion pipeline
+│   ├── app/                  # REST endpoints, database models, schemas, and AI services
+│   ├── Dockerfile            # Python 3.11 container specification
 │   ├── requirements.txt      # Python dependencies
-│   ├── run_bot.py            # Telegram Bot polling & interaction gateway
-│   ├── run_pipeline_gateway.py # Event ingestion & enrichment runner
-│   ├── schema.sql            # PostgreSQL database schema
-│   └── seed_interests.py     # Default interest tags seed script
+│   ├── package.json          # Backend workspace scripts for Turborepo
+│   └── run_bot.py            # Telegram Bot runtime
 ├── frontend/                 # Telegram Mini App client (React 19 + TypeScript + Vite)
 │   ├── src/                  # React components, pages, hooks, and API clients
-│   ├── public/               # Public assets and Telegram WebApp metadata
-│   ├── package.json          # Frontend dependencies & build scripts
-│   └── vite.config.ts        # Vite configuration
-├── docker-compose.yml        # Root Docker Compose for full local stack (Postgres + Redis + API + Bot)
-└── package.json              # Monorepo root workspaces & convenience scripts
+│   ├── Dockerfile            # Multi-stage production container (Node 20 builder + Nginx runner)
+│   ├── nginx.conf            # Nginx SPA router and backend API proxy
+│   └── package.json          # Frontend workspace dependencies & scripts
+├── docker-compose.yml        # Root app orchestration (FE & BE standalone containers)
+├── turbo.json                # Turborepo pipeline configuration
+└── package.json              # Monorepo root workspaces & scripts
 ```
 
 ---
 
-## Quick Start & Local Development
+## Turborepo Commands
 
-### Prerequisites
-
-- **Node.js**: v18+ (v20+ recommended)
-- **Python**: 3.11+
-- **PostgreSQL**: 15+ (or use Docker Compose)
-- **Redis**: 7+ (or use Docker Compose)
-
----
-
-### 1. Database & Cache (Docker)
-
-To quickly spin up PostgreSQL and Redis:
-
-```bash
-docker compose up -d postgres redis
-```
-
----
-
-### 2. Backend Setup
-
-```bash
-cd backend
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-
-# Initialize database schema & seed categories
-createdb addis_event_db
-psql -d addis_event_db -f schema.sql
-python seed_interests.py
-
-# Start development server
-uvicorn app.main:app --reload --port 8000
-```
-
-- **Interactive API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Alternative Docs (ReDoc)**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-To run the Telegram Bot:
-```bash
-python run_bot.py
-```
-
-To run the event ingestion pipeline:
-```bash
-python run_pipeline_gateway.py
-```
-
----
-
-### 3. Frontend Setup
-
-From the repository root (using npm workspaces):
-
-```bash
-# Install dependencies
-npm install
-
-# Start Vite development server
-npm run dev:frontend
-```
-
-Or navigate to `frontend/`:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## Root NPM Scripts
+All tasks are unified and accelerated via Turborepo caching:
 
 | Command | Description |
 | :--- | :--- |
-| `npm run dev:frontend` | Launch Vite dev server for the Telegram Mini App |
-| `npm run build:frontend` | Type-check and build the production bundle |
-| `npm run lint:frontend` | Run ESLint checks across the frontend codebase |
-| `npm run preview:frontend` | Locally preview the frontend production build |
-| `npm run dev:backend` | Start the FastAPI backend with hot reloading |
-| `npm run dev:bot` | Start the Telegram Bot poller |
-| `npm run test:backend` | Run backend pytest test suite |
+| `npm run dev` | Run both **Backend** and **Frontend** concurrently with multiplexed logs |
+| `npm run build` | Cache-accelerated build across all workspaces |
+| `npm run lint` | Run code validation across backend and frontend |
+| `npm run test` | Run test suites across workspaces |
+| `npm run dev:frontend` | Run frontend development server only (`vite`) |
+| `npm run dev:backend` | Run backend development server only (`uvicorn`) |
+| `npm run build:frontend` | Build frontend production bundle |
+| `npm run lint:frontend` | Lint frontend codebase |
 
 ---
 
-## Monorepo Architecture Overview
+## Docker Orchestration
 
-```mermaid
-flowchart TD
-    subgraph Data Sources
-        TG[Telegram Channels]
-        IG[Instagram]
-        TT[TikTok]
-    end
+The root `docker-compose.yml` orchestrates the application containers (**Backend** and **Frontend**) without bundling database/cache servers inside docker:
 
-    subgraph Backend Services
-        Pipeline[Ingestion Pipeline Gateway]
-        LLM[LLM Classification & Enrichment\nGemini / DeepSeek / Groq]
-        API[FastAPI REST API\n:8000]
-        Bot[Telegram Bot Engine\nPolling / Broadcasts]
-        DB[(PostgreSQL)]
-        Cache[(Redis Cache & Queues)]
-    end
+```bash
+# Build and start both Frontend and Backend application containers
+docker compose up -d --build
 
-    subgraph Frontend Client
-        MiniApp[Telegram WebApp\nReact 19 + TypeScript + Vite]
-    end
+# View real-time logs
+docker compose logs -f
 
-    TG --> Pipeline
-    IG --> Pipeline
-    TT --> Pipeline
-    Pipeline --> LLM
-    LLM --> DB
-    LLM --> Cache
-    API --> DB
-    API --> Cache
-    Bot --> DB
-    Bot --> Cache
-    MiniApp <-->|REST API / Auth| API
+# Stop containers
+docker compose down
 ```
 
+* **Frontend Container**: Exposed on `http://localhost:3000` (Nginx serving production bundle with SPA fallback and `/api/` proxying).
+* **Backend Container**: Exposed on `http://localhost:8000` (FastAPI with OpenAPI docs at `/docs`).
+
+> **Note**: Database (PostgreSQL) and Cache (Redis) are managed externally (e.g., managed cloud instances, RDS, or system services) and configured via environment variables in `backend/.env`.
+
 ---
 
-## Contributing & Development Workflow
+## Root CI/CD Pipeline
 
-1. Keep backend dependencies strictly managed in `backend/requirements.txt`.
-2. Keep frontend packages cleanly configured in `frontend/package.json`.
-3. All feature branches should branch from `main`.
+The GitHub Actions workflow is located at [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
+
+1. **Lint & Build Stage (`ci`)**: Runs Turborepo linting (`npx turbo lint`) and build (`npx turbo build`) with caching.
+2. **Container Image Build & Push Stage (`build-and-push`)**: Matrix job that builds and pushes separate production Docker images to GitHub Container Registry (GHCR):
+   * Backend Image: `ghcr.io/<org>/<repo>-backend:latest`
+   * Frontend Image: `ghcr.io/<org>/<repo>-frontend:latest`
+3. **Deployment Stage (`deploy`)**: Connects to the host server, transfers runtime configuration securely, pulls the latest container images from GHCR, and starts the orchestrated containers with `docker compose`.

@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Build, Publish & Deploy
+name: CI/CD Pipeline - Turbo, Docker Images & Deploy
 
 on:
   push:
@@ -12,12 +12,11 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # 1. CI Stage: Code Syntax & Verification
+  # 1. CI Stage: Turborepo lint and build verification
   ci:
-    name: CI - Code Verification
+    name: CI - Lint & Build (Turborepo)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -28,23 +27,50 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Dependencies
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
 
-      - name: Validate Python Syntax
-        run: |
-          python -m compileall app/ run_bot.py
+      - name: Install Node Dependencies
+        run: npm ci
 
-  # 2. Build & Push Docker Image to GitHub Container Registry (GHCR)
+      - name: Run Turbo Lint
+        run: npx turbo lint
+
+      - name: Run Turbo Build
+        run: npx turbo build
+
+  # 2. Build & Push Docker Images to GitHub Container Registry (GHCR)
   build-and-push:
-    name: Build & Push Docker Image
+    name: Build & Push (${{ matrix.service }})
     needs: ci
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+            image: ghcr.io/${{ github.repository }}-backend
+          - service: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            image: ghcr.io/${{ github.repository }}-frontend
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry (GHCR)
         uses: docker/login-action@v3
@@ -57,7 +83,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ matrix.image }}
           tags: |
             type=raw,value=latest
             type=sha,format=short
@@ -65,22 +91,23 @@ jobs:
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  # 3. CD Stage: Deploy to EC2 Server via SSH
+  # 3. CD Stage: Deploy Application Containers to EC2 Server via SSH
   deploy:
-    name: Deploy to EC2 Server
+    name: Deploy Application Containers
     needs: build-and-push
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
-      # ── Write .env on the runner ──
-      # Secret masking works reliably here (runner logs, not SSH session logs).
-      # Secrets never travel inside an SSH script where masking is unreliable.
-      - name: Write .env file on runner
+      # Write .env on the runner (secrets masked in runner logs)
+      - name: Write backend .env file on runner
         run: |
           cat > .env << 'ENVEOF'
           PROJECT_NAME="${{ secrets.PROJECT_NAME }}"
@@ -133,7 +160,7 @@ jobs:
           ENVEOF
           chmod 600 .env
 
-      # ── Set up SSH key ──
+      # Set up SSH key
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
@@ -141,7 +168,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      # ── SCP .env to server — no secrets exposed in SSH session logs ──
+      # Copy .env to server
       - name: Copy .env to server via SCP
         run: |
           APP_DIR="/home/${{ secrets.SSH_USER }}/app"
@@ -149,51 +176,60 @@ jobs:
           scp -i ~/.ssh/deploy_key .env ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:$APP_DIR/.env
           ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "chmod 600 $APP_DIR/.env"
 
-      # ── Restart services — zero secrets referenced in this SSH session ──
+      # Restart application containers
       - name: Deploy and restart services
         env:
-          IMAGE_TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          BACKEND_IMAGE_RAW: ghcr.io/${{ github.repository }}-backend:latest
+          FRONTEND_IMAGE_RAW: ghcr.io/${{ github.repository }}-frontend:latest
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SERVER_IP: ${{ secrets.SERVER_IP }}
         run: |
           APP_DIR="/home/${SSH_USER}/app"
-          IMAGE_REPO=$(echo "${IMAGE_TAG}" | tr '[:upper:]' '[:lower:]')
+          BACKEND_IMAGE=$(echo "${BACKEND_IMAGE_RAW}" | tr '[:upper:]' '[:lower:]')
+          FRONTEND_IMAGE=$(echo "${FRONTEND_IMAGE_RAW}" | tr '[:upper:]' '[:lower:]')
 
           ssh -i ~/.ssh/deploy_key ${SSH_USER}@${SERVER_IP} \
-            APP_DIR="$APP_DIR" IMAGE_REPO="$IMAGE_REPO" GITHUB_ACTOR="$GITHUB_ACTOR" \
+            APP_DIR="$APP_DIR" BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" GITHUB_ACTOR="$GITHUB_ACTOR" \
             'bash -s' << 'SSHEOF'
             set -e
             cd "$APP_DIR"
 
-            # Login to GHCR — password piped via stdin, never echoed to log
+            # Login to GHCR
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-            # Write docker-compose.yml — no secrets inside
+            # Orchestrate separate FE and BE containers
             cat > docker-compose.yml << COMPOSEEOF
             services:
-              api:
-                image: ${IMAGE_REPO}
-                container_name: paza_event_api
+              backend:
+                image: ${BACKEND_IMAGE}
+                container_name: paza_backend
                 restart: always
                 env_file:
                   - .env
                 ports:
                   - "8000:8000"
                 volumes:
-                  - static_data:/app/static
+                  - backend_static:/app/static
 
               bot:
-                image: ${IMAGE_REPO}
-                container_name: paza_event_bot
+                image: ${BACKEND_IMAGE}
+                container_name: paza_bot
                 restart: always
                 command: ["python", "run_bot.py"]
                 env_file:
                   - .env
 
+              frontend:
+                image: ${FRONTEND_IMAGE}
+                container_name: paza_frontend
+                restart: always
+                ports:
+                  - "3000:80"
+
             volumes:
-              static_data:
+              backend_static:
             COMPOSEEOF
 
             docker compose pull
@@ -201,7 +237,7 @@ jobs:
             docker image prune -af
           SSHEOF
 
-      # ── Always clean up SSH key from runner ──
+      # Clean up SSH key from runner
       - name: Clean up SSH key
         if: always()
         run: rm -f ~/.ssh/deploy_key .env

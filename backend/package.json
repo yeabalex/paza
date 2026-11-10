@@ -1,0 +1,13 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python3 -m uvicorn app.main:app --reload --port 8000",
+    "dev:bot": "python3 run_bot.py",
+    "dev:pipeline": "python3 run_pipeline_gateway.py",
+    "test": "pytest",
+    "lint": "python3 -m compileall app/ run_bot.py",
+    "build": "python3 -m compileall app/ run_bot.py"
+  }
+}
