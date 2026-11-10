@@ -11,17 +11,18 @@ paza/
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml        # Root CI/CD pipeline (Turbo lint/build + Docker images build/push + EC2 deploy)
-├── backend/                  # FastAPI backend server, REST API, and automated ingestion pipeline
-│   ├── app/                  # REST endpoints, database models, schemas, and AI services
-│   ├── Dockerfile            # Python 3.11 container specification
-│   ├── requirements.txt      # Python dependencies
-│   ├── package.json          # Backend workspace scripts for Turborepo
-│   └── schema.sql            # PostgreSQL database schema
-├── frontend/                 # Web App client (React 19 + TypeScript + Vite + Tailwind CSS)
-│   ├── src/                  # React components, pages, hooks, and API clients
-│   ├── Dockerfile            # Multi-stage production container (Node 20 builder + Nginx runner)
-│   ├── nginx.conf            # Nginx SPA router and backend API proxy
-│   └── package.json          # Frontend workspace dependencies & scripts
+├── app/                      # Applications workspace folder
+│   ├── backend/              # FastAPI backend server, REST API, and automated ingestion pipeline
+│   │   ├── app/              # REST endpoints, database models, schemas, and AI services
+│   │   ├── Dockerfile        # Python 3.11 container specification
+│   │   ├── requirements.txt  # Python dependencies
+│   │   ├── package.json      # Backend workspace scripts for Turborepo
+│   │   └── schema.sql        # PostgreSQL database schema
+│   └── frontend/             # Web App client (React 19 + TypeScript + Vite + Tailwind CSS)
+│       ├── src/              # React components, pages, hooks, and API clients
+│       ├── Dockerfile        # Multi-stage production container (Node 20 builder + Nginx runner)
+│       ├── nginx.conf        # Nginx SPA router and backend API proxy
+│       └── package.json      # Frontend workspace dependencies & scripts
 ├── docker-compose.yml        # Root app orchestration (FE & BE standalone containers)
 ├── turbo.json                # Turborepo pipeline configuration
 └── package.json              # Monorepo root workspaces & scripts
@@ -64,7 +65,7 @@ docker compose down
 * **Frontend Container**: Exposed on `http://localhost:3000` (Nginx serving production bundle with SPA fallback and `/api/` proxying).
 * **Backend Container**: Exposed on `http://localhost:8000` (FastAPI with OpenAPI docs at `/docs`).
 
-> **Note**: Database (PostgreSQL) and Cache (Redis) are managed externally (e.g., managed cloud instances, RDS, or system services) and configured via environment variables in `backend/.env`.
+> **Note**: Database (PostgreSQL) and Cache (Redis) are managed externally (e.g., managed cloud instances, RDS, or system services) and configured via environment variables in `app/backend/.env`.
 
 ---
 

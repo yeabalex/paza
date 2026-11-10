@@ -5,8 +5,7 @@
   "description": "Paza Web App Monorepo",
   "packageManager": "npm@11.19.0",
   "workspaces": [
-    "frontend",
-    "backend"
+    "app/*"
   ],
   "scripts": {
     "dev": "turbo dev",

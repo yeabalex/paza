@@ -1,12 +1,13 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ./app/backend
       dockerfile: Dockerfile
     container_name: paza_backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - path: ./app/backend/.env
+        required: false
     ports:
       - "${PORT:-8000}:8000"
     volumes:
@@ -14,7 +15,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./app/frontend
       dockerfile: Dockerfile
     container_name: paza_frontend
     restart: unless-stopped
