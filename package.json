@@ -1,0 +1,18 @@
+{
+  "name": "paza-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Paza Event Bot & Mini App Monorepo",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "lint:frontend": "npm run lint --workspace=frontend",
+    "preview:frontend": "npm run preview --workspace=frontend",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000",
+    "dev:bot": "cd backend && python run_bot.py",
+    "test:backend": "cd backend && pytest"
+  }
+}

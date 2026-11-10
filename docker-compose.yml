@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paza_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-addis_event_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: paza_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+
+  backend-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: paza_event_api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ./backend/.env
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - static_data:/app/static
+
+  backend-bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: paza_event_bot
+    restart: unless-stopped
+    command: ["python", "run_bot.py"]
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ./backend/.env
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_data:
