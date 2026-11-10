@@ -3,11 +3,12 @@ import { X, Copy, Check, Upload, CreditCard, User, FileText, ExternalLink } from
 import type { EventItem, RsvpUser, User as AppUser } from '../../types';
 import type { EventDetailItem } from '../../api/events';
 import { markGoing } from '../../api/events';
-import { openExternalUrl } from '../../utils/telegram';
+import { openExternalUrl } from '../../utils/navigation';
 
 interface RsvpPaymentModalProps {
   event: EventItem | EventDetailItem;
-  telegramUser: AppUser | null;
+  user?: AppUser | null;
+  telegramUser?: AppUser | null;
   isLoading?: boolean;
   onClose: () => void;
   onSuccess: (rsvp: RsvpUser) => void;
@@ -15,15 +16,17 @@ interface RsvpPaymentModalProps {
 
 export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
   event,
+  user,
   telegramUser,
   isLoading = false,
   onClose,
   onSuccess,
 }) => {
+  const activeUser = user || telegramUser || null;
   const isScraped = event.source_type === 'scraped' || event.id.includes(':') || event.id.startsWith('scraped_');
   const isPaid = !isScraped && (event.entrance_fee_etb || 0) > 0;
-  const initialName = telegramUser
-    ? `${telegramUser.first_name || ''} ${telegramUser.last_name || ''}`.trim()
+  const initialName = activeUser
+    ? `${activeUser.first_name || ''} ${activeUser.last_name || ''}`.trim()
     : '';
 
   const [fullName, setFullName] = useState(initialName);
@@ -110,7 +113,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
       return;
     }
 
-    const effectiveUser: AppUser = telegramUser || {
+    const effectiveUser: AppUser = activeUser || {
       id: Math.floor(100000000 + Math.random() * 900000000),
       first_name: fullName.trim() || 'Guest User',
     };

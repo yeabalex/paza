@@ -23,14 +23,15 @@ import { GoingModal } from './GoingModal';
 import { InviteCustomizerModal } from './InviteCustomizerModal';
 import { OrganizerHeaderBadge } from './OrganizerHeaderBadge';
 import { RsvpPaymentModal } from './RsvpPaymentModal';
-import { openExternalUrl } from '../../utils/telegram';
+import { openExternalUrl } from '../../utils/navigation';
 
 interface EventDetailProps {
   event: EventItem;
   isJoined: boolean;
   onBack: () => void;
   onToggleJoin: (eventId: string) => void;
-  telegramUser: User | null;
+  user?: User | null;
+  telegramUser?: User | null;
 }
 
 const MAX_AVATARS = 5;
@@ -40,8 +41,10 @@ export function EventDetail({
   isJoined,
   onBack,
   onToggleJoin,
+  user,
   telegramUser,
 }: EventDetailProps) {
+  const currentUser = user || telegramUser || null;
   const [copied, setCopied] = useState(false);
   const [fullDetail, setFullDetail] = useState<EventDetailItem | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
@@ -65,7 +68,7 @@ export function EventDetail({
         if (detail) setFullDetail(detail);
         setRsvps(rsvpList);
         // Check if current user is already going
-        if (telegramUser && rsvpList.some((r) => r.telegram_id === telegramUser.id)) {
+        if (currentUser && rsvpList.some((r) => r.telegram_id === currentUser.id)) {
           setIsGoing(true);
         }
         setIsLoadingDetail(false);
@@ -77,7 +80,7 @@ export function EventDetail({
     return () => {
       isMounted = false;
     };
-  }, [event.id, telegramUser]);
+  }, [event.id, currentUser]);
 
   const activeData = fullDetail || event;
 
@@ -158,15 +161,15 @@ export function EventDetail({
   };
 
   const handleGoingClick = async () => {
-    if (!telegramUser) return;
+    if (!currentUser) return;
 
     if (isGoing) {
       // Remove RSVP
       setIsSubmittingRsvp(true);
-      const success = await removeGoing(event.id, telegramUser.id);
+      const success = await removeGoing(event.id, currentUser.id);
       if (success) {
         setIsGoing(false);
-        setRsvps((prev) => prev.filter((r) => r.telegram_id !== telegramUser.id));
+        setRsvps((prev) => prev.filter((r) => r.telegram_id !== currentUser.id));
       }
       setIsSubmittingRsvp(false);
     } else {
@@ -495,7 +498,7 @@ export function EventDetail({
       {showRsvpPaymentModal && (
         <RsvpPaymentModal
           event={activeData}
-          telegramUser={telegramUser}
+          user={currentUser}
           isLoading={isLoadingDetail && !fullDetail}
           onClose={() => setShowRsvpPaymentModal(false)}
           onSuccess={(newRsvp) => {
@@ -514,7 +517,7 @@ export function EventDetail({
       {showInviteModal && (
         <InviteCustomizerModal
           event={activeData}
-          telegramUser={telegramUser}
+          user={currentUser}
           onClose={() => setShowInviteModal(false)}
         />
       )}

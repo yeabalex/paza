@@ -15,15 +15,18 @@ import {
 
 interface InviteCustomizerModalProps {
   event: EventItem;
-  telegramUser: User | null;
+  user?: User | null;
+  telegramUser?: User | null;
   onClose: () => void;
 }
 
 export function InviteCustomizerModal({
   event,
+  user,
   telegramUser,
   onClose,
 }: InviteCustomizerModalProps) {
+  const activeUser = user || telegramUser;
   const [selectedInvitee, setSelectedInvitee] = useState<UserSearchResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
@@ -50,7 +53,7 @@ export function InviteCustomizerModal({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const activeInviter: User = telegramUser || {
+  const activeInviter: User = activeUser || {
     id: 999888777,
     first_name: 'You',
     username: 'you',

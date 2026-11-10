@@ -142,11 +142,11 @@ export async function fetchEventDetail(eventId: string): Promise<EventDetailItem
 // RSVP ("Going") API Functions
 // ════════════════════════════════════════════════════════════════════════════════
 
-import type { RsvpUser, TelegramUser } from '../types';
+import type { RsvpUser, User } from '../types';
 
 export async function markGoing(
   eventId: string,
-  tgUser: TelegramUser,
+  user: User,
   message?: string,
   fullName?: string,
   transactionId?: string,
@@ -157,11 +157,11 @@ export async function markGoing(
     method: 'POST',
     body: JSON.stringify({
       event_id: eventId,
-      telegram_id: tgUser.id,
-      first_name: tgUser.first_name,
-      full_name: fullName || `${tgUser.first_name} ${tgUser.last_name || ''}`.trim(),
-      username: tgUser.username || null,
-      photo_url: tgUser.photo_url || null,
+      telegram_id: user.id,
+      first_name: user.first_name,
+      full_name: fullName || `${user.first_name} ${user.last_name || ''}`.trim(),
+      username: user.username || null,
+      photo_url: user.photo_url || null,
       message: message || null,
       transaction_id: transactionId || null,
       screenshot_url: screenshotUrl || null,

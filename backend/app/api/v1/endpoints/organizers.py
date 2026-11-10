@@ -390,32 +390,7 @@ async def create_organizer_event(
     try:
         event = await EventRepository.create_organizer_event(db, organizer.id, payload)
 
-        # Trigger instant notification broadcast to all Telegram users
-        try:
-            event_id_str = str(event.id)
-            start_str = event.start_time.strftime("%a, %b %d • %I:%M %p") if getattr(event, "start_time", None) else "TBD"
-            price_val = float(event.price_etb) if getattr(event, "price_etb", None) and float(event.price_etb) > 0 else 0.0
-            price_str = f"{price_val} ETB" if price_val > 0 else "FREE"
-            org_name = getattr(organizer, "org_name", None) or "Organizer Host"
-            verified_badge = "✓" if getattr(organizer, "is_verified", False) else ""
-
-            msg_desc = event.description[:140] + "..." if event.description and len(event.description) > 140 else (event.description or "")
-
-            msg_text = (
-                f"🔥 **NEW EVENT ANNOUNCEMENT!** 🎟️\n\n"
-                f"📌 **{event.title}**\n"
-                f"📅 **Date**: {start_str}\n"
-                f"📍 **Venue**: {event.venue_name or 'Addis Ababa'}\n"
-                f"💰 **Entrance**: {price_str}\n"
-                f"👤 **Host**: {org_name} {verified_badge}\n\n"
-                f"{msg_desc}\n\n"
-                f"Tap below to RSVP & view details in Mini App!"
-            )
-
-            logger.info(f"New organizer event published: {event.title} by {org_name}")
-        except Exception as b_err:
-            logger.error(f"Failed to initiate organizer event broadcast: {b_err}")
-
+        logger.info(f"New organizer event published: {event.title} (ID: {event.id})")
         return OrganizerEventResponse.model_validate(event)
     except Exception as e:
         logger.error(f"Error creating event: {e}")
@@ -534,8 +509,8 @@ class ConfirmRsvpRequest(BaseModel):
 
 @router.post(
     "/rsvps/confirm",
-    summary="Confirm RSVP Attendance and Send Ticket via Bot",
-    description="Marks attendee status as confirmed, generates a ticket pass code, and sends a notification message via Telegram bot."
+    summary="Confirm RSVP Attendance and Issue Ticket Pass",
+    description="Marks attendee status as confirmed and generates a ticket pass code for the attendee."
 )
 async def confirm_rsvp(
     body: ConfirmRsvpRequest,

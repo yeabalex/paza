@@ -355,7 +355,7 @@ export function App() {
         isJoined={!!joinedEvents[selectedEvent.id]}
         onBack={() => setSelectedEvent(null)}
         onToggleJoin={toggleJoin}
-        telegramUser={currentUser}
+        user={currentUser}
       />
     );
   }
