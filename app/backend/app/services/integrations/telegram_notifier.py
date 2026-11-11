@@ -66,7 +66,8 @@ class TelegramBotNotifier:
                 logger.error(f"Telegram API error HTTP {resp.status_code}: {resp.text[:300]}")
                 return False
         except Exception as exc:
-            logger.error(f"Failed sending Telegram notification: {exc}")
+            safe_err = str(exc).replace(self.bot_token, "***") if self.bot_token else str(exc)
+            logger.error(f"Failed sending Telegram notification: {safe_err}")
             return False
 
     async def notify_pipeline_result(

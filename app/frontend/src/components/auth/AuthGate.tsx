@@ -104,12 +104,10 @@ export function AuthGate({ isClerkEnabled }: AuthGateProps) {
                 Access to PAZA is restricted. Add your Clerk credentials to continue:
               </p>
               <code className="auth-env-hint">
-                VITE_CLERK_PUBLISHABLE_KEY=&quot;pk_test_...&quot;
-                <br />
-                CLERK_SECRET_KEY=&quot;sk_test_...&quot;
+                VITE_CLERK_PUBLISHABLE_KEY=&quot;pk_...&quot;
               </code>
               <p className="auth-env-note">
-                Set these in <strong>.env.local</strong> for local dev (or GitHub Secrets /{' '}
+                Set this in <strong>.env.local</strong> for local dev (or GitHub Secrets /{' '}
                 <strong>.env.prod</strong> for production) and restart the frontend server.
               </p>
             </div>

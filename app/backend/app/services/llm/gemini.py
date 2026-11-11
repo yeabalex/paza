@@ -26,8 +26,9 @@ class GeminiLLMProvider(BaseLLMProvider):
 
         models_to_try = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.5-flash"]
         last_error = None
+        headers = {"x-goog-api-key": self.api_key}
         for model_id in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
             payload = {
                 "contents": [
                     {
@@ -42,7 +43,7 @@ class GeminiLLMProvider(BaseLLMProvider):
             }
 
             async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(url, json=payload)
+                response = await client.post(url, headers=headers, json=payload)
                 if response.status_code == 200:
                     res_json = response.json()
                     candidate_text = res_json["candidates"][0]["content"]["parts"][0]["text"]

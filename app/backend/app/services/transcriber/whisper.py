@@ -165,8 +165,9 @@ class WhisperTranscriber:
 
             mime_type = "video/mp4" if audio_filepath.lower().endswith(".mp4") else "audio/mp3"
             models_to_try = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.5-flash"]
+            headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
             for model_id in models_to_try:
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={settings.GEMINI_API_KEY}"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
                 payload = {
                     "contents": [{
                         "parts": [
@@ -177,7 +178,7 @@ class WhisperTranscriber:
                 }
 
                 async with httpx.AsyncClient(timeout=45.0) as client:
-                    resp = await client.post(gemini_url, json=payload)
+                    resp = await client.post(gemini_url, headers=headers, json=payload)
                     if resp.status_code == 200:
                         candidates = resp.json().get("candidates", [])
                         if candidates:
