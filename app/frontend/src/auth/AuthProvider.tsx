@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ClerkProvider, useAuth, useClerk, useUser } from '@clerk/react';
 import { setAuthTokenProvider } from '../api/client';
 import {
@@ -25,25 +25,41 @@ function ClerkAuthBridge({ children }: { children: ReactNode }) {
     };
   }, [getToken]);
 
-  const mappedUser: AuthUserInfo | null = user
-    ? {
-        id: user.id,
-        fullName: user.fullName || null,
-        firstName: user.firstName || null,
-        username: user.username || null,
-        email: user.primaryEmailAddress?.emailAddress || null,
-        imageUrl: user.imageUrl || null,
-      }
-    : null;
+  const userId = user?.id ?? null;
+  const userFullName = user?.fullName ?? null;
+  const userFirstName = user?.firstName ?? null;
+  const userUsername = user?.username ?? null;
+  const userEmail = user?.primaryEmailAddress?.emailAddress ?? null;
+  const userImageUrl = user?.imageUrl ?? null;
 
-  const value: AppAuthState = {
-    isClerkEnabled: true,
-    isLoaded: authLoaded && userLoaded && providerReady,
-    isSignedIn: Boolean(isSignedIn),
-    user: mappedUser,
-    getToken,
-    openSignIn: () => clerk.openSignIn(),
-  };
+  const mappedUser: AuthUserInfo | null = useMemo(
+    () =>
+      userId
+        ? {
+            id: userId,
+            fullName: userFullName,
+            firstName: userFirstName,
+            username: userUsername,
+            email: userEmail,
+            imageUrl: userImageUrl,
+          }
+        : null,
+    [userId, userFullName, userFirstName, userUsername, userEmail, userImageUrl]
+  );
+
+  const openSignIn = useCallback(() => clerk.openSignIn(), [clerk]);
+
+  const value: AppAuthState = useMemo(
+    () => ({
+      isClerkEnabled: true,
+      isLoaded: authLoaded && userLoaded && providerReady,
+      isSignedIn: Boolean(isSignedIn),
+      user: mappedUser,
+      getToken,
+      openSignIn,
+    }),
+    [authLoaded, userLoaded, providerReady, isSignedIn, mappedUser, getToken, openSignIn]
+  );
 
   return <AppAuthContext.Provider value={value}>{children}</AppAuthContext.Provider>;
 }

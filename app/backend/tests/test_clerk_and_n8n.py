@@ -672,4 +672,30 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
         finally:
             app.dependency_overrides.pop(get_db, None)
 
+    async def test_email_auth_rejects_passwordless_oauth_user(self):
+        from types import SimpleNamespace
+        from app.services.organizer.organizer_repository import OrganizerRepository
+
+        existing_oauth_user = SimpleNamespace(
+            id=99,
+            email="oauth@paza.et",
+            hashed_password=None,
+            clerk_id="user_clerk_99",
+        )
+        fake_db = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
+
+        with patch.object(
+            OrganizerRepository,
+            "get_user_by_email",
+            new=AsyncMock(return_value=existing_oauth_user),
+        ):
+            with self.assertRaises(ValueError):
+                await OrganizerRepository.authenticate_or_register_email(
+                    fake_db,
+                    email="oauth@paza.et",
+                    password="attacker-chosen-password",
+                )
+        self.assertIsNone(existing_oauth_user.hashed_password)
+        fake_db.commit.assert_not_awaited()
+
 

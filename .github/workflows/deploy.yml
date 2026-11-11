@@ -174,62 +174,62 @@ jobs:
           ssh -i ~/.ssh/deploy_key ${SSH_USER}@${SERVER_IP} \
             APP_DIR="$APP_DIR" BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" GITHUB_ACTOR="$GITHUB_ACTOR" GITHUB_TOKEN="$GITHUB_TOKEN" SERVER_IP="$SERVER_IP" \
             'bash -s' << 'SSHEOF'
-            set -e
-            cd "$APP_DIR"
+          set -e
+          cd "$APP_DIR"
 
-            # Login to GHCR
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          # Login to GHCR
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-            # Orchestrate separate FE and BE containers
-            cat > docker-compose.yml << COMPOSEEOF
-            services:
-              backend:
-                image: ${BACKEND_IMAGE}
-                container_name: paza_backend
-                restart: always
-                env_file:
-                  - .env
-                ports:
-                  - "8000:8000"
-                volumes:
-                  - backend_static:/app/static
+          # Orchestrate separate FE and BE containers
+          cat > docker-compose.yml << COMPOSEEOF
+          services:
+            backend:
+              image: ${BACKEND_IMAGE}
+              container_name: paza_backend
+              restart: always
+              env_file:
+                - .env
+              ports:
+                - "8000:8000"
+              volumes:
+                - backend_static:/app/static
 
-              frontend:
-                image: ${FRONTEND_IMAGE}
-                container_name: paza_frontend
-                restart: always
-                ports:
-                  - "3000:80"
+            frontend:
+              image: ${FRONTEND_IMAGE}
+              container_name: paza_frontend
+              restart: always
+              ports:
+                - "3000:80"
 
-            volumes:
-              backend_static:
-            COMPOSEEOF
+          volumes:
+            backend_static:
+          COMPOSEEOF
 
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker image prune -af
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker image prune -af
 
-            # Configure Caddy for paza.yab.et (frontend + forwarded /api & /static to backend)
-            sudo tee /etc/caddy/Caddyfile > /dev/null << CADDYEOF
-            paza.yab.et, ${SERVER_IP}.nip.io {
-                respond /.env* "Access Denied" 403
-                respond /.git* "Access Denied" 403
+          # Configure Caddy for paza.yab.et (frontend + forwarded /api & /static to backend)
+          sudo tee /etc/caddy/Caddyfile > /dev/null << CADDYEOF
+          paza.yab.et, ${SERVER_IP}.nip.io {
+              respond /.env* "Access Denied" 403
+              respond /.git* "Access Denied" 403
 
-                handle /api/* {
-                    reverse_proxy localhost:8000
-                }
+              handle /api/* {
+                  reverse_proxy localhost:8000
+              }
 
-                handle /static/* {
-                    reverse_proxy localhost:8000
-                }
+              handle /static/* {
+                  reverse_proxy localhost:8000
+              }
 
-                handle {
-                    reverse_proxy localhost:3000
-                }
-            }
-            CADDYEOF
-            sudo caddy validate --config /etc/caddy/Caddyfile
-            sudo systemctl reload caddy || sudo systemctl restart caddy
+              handle {
+                  reverse_proxy localhost:3000
+              }
+          }
+          CADDYEOF
+          sudo caddy validate --config /etc/caddy/Caddyfile
+          sudo systemctl reload caddy || sudo systemctl restart caddy
           SSHEOF
 
       # Clean up SSH key from runner

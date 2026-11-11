@@ -43,13 +43,12 @@ class OrganizerRepository:
         user = await OrganizerRepository.get_user_by_email(db, clean_email)
 
         if user:
-            if user.hashed_password and not verify_password(password, user.hashed_password):
-                raise ValueError("Invalid password for this account.")
-            # If user had no password (e.g. created via Google), attach password
             if not user.hashed_password:
-                user.hashed_password = hash_password(password)
-                await db.commit()
-                await db.refresh(user)
+                raise ValueError(
+                    "This account uses Clerk or Google sign-in and does not have a password set."
+                )
+            if not verify_password(password, user.hashed_password):
+                raise ValueError("Invalid password for this account.")
             return user
 
         # Create new user

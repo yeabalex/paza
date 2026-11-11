@@ -74,10 +74,11 @@ export async function fetchExploreEvents(category?: string, skip = 0, timeframe:
 }
 
 export async function fetchForYouEvents(telegramId: number, category?: string): Promise<EventItem[]> {
-  let query = `?telegram_id=${telegramId}`;
+  const params = new URLSearchParams({ telegram_id: String(telegramId) });
   if (category && category !== 'all') {
-    query += `&category=${category}`;
+    params.set('category', category);
   }
+  const query = `?${params.toString()}`;
   const cacheKey = `foryou_${telegramId}_${category || 'all'}`;
 
   const cached = getFromCache<EventItem[]>(cacheKey);
