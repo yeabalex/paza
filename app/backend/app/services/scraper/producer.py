@@ -183,9 +183,13 @@ class ScraperProducer:
                         messages = await web_scraper.fetch_website_url(value, limit=target.max_posts)
 
                 elif target.platform == ScraperPlatform.TELEGRAM:
+                    try:
+                        tg_watermark = int(target.last_watermark) if target.last_watermark and target.last_watermark != "0" else 0
+                    except ValueError:
+                        tg_watermark = 0
                     messages = await self.scraper.fetch_channel_messages(
                         channel_username=value,
-                        last_message_id=int(target.last_watermark) if target.last_watermark != "0" else 0,
+                        last_message_id=tg_watermark,
                         limit=target.max_posts,
                     )
                     # Update watermark to max message_id

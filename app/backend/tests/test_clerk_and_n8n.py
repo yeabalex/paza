@@ -927,4 +927,54 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
         finally:
             app.dependency_overrides.pop(get_db, None)
 
+    async def test_scraper_watermark_platform_scoped_and_resilient(self):
+        from types import SimpleNamespace
+        from app.schemas.event import ScraperPlatform, ScraperTarget, TargetType
+        from app.services.scraper.db_target_repository import DatabaseTargetRepository
+        from app.services.scraper.producer import ScraperProducer
+        from app.services.scraper.redis_queue import RedisQueueManager
+
+        captured_stmts = []
+
+        class _FakeSession:
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                return False
+            async def execute(self, stmt):
+                captured_stmts.append(stmt)
+            async def commit(self):
+                pass
+            async def rollback(self):
+                pass
+
+        with patch("app.services.scraper.db_target_repository.AsyncSessionLocal", return_value=_FakeSession()):
+            ok = await DatabaseTargetRepository().update_watermark("instagram", "linkupaddis", "C_abc123")
+            self.assertTrue(ok)
+        self.assertEqual(len(captured_stmts), 1)
+        compiled = str(captured_stmts[0])
+        self.assertIn("scraper_targets.platform =", compiled)
+        self.assertIn("scraper_targets.value =", compiled)
+
+        # Producer should not crash if Telegram target has a legacy non-numeric watermark
+        mock_scraper = SimpleNamespace(fetch_channel_messages=AsyncMock(return_value=[]))
+        producer = ScraperProducer(queue_manager=RedisQueueManager(), scraper=mock_scraper)
+        targets = [
+            ScraperTarget(
+                platform=ScraperPlatform.TELEGRAM,
+                target_type=TargetType.USERNAME,
+                value="linkupaddis",
+                last_watermark="not_an_int",
+                max_posts=5,
+                is_active=True,
+            )
+        ]
+        res_targets = await producer.run_unified_producer_cycle(targets)
+        self.assertEqual(len(res_targets), 1)
+        mock_scraper.fetch_channel_messages.assert_awaited_once_with(
+            channel_username="linkupaddis",
+            last_message_id=0,
+            limit=5,
+        )
+
 

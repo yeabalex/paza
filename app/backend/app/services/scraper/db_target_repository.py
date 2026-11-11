@@ -42,11 +42,12 @@ class DatabaseTargetRepository:
         """Update last_watermark for a target in PostgreSQL DB."""
         async with AsyncSessionLocal() as session:
             try:
-                # Support both enum and string matching
+                plat_enum = ScraperPlatformEnum(platform.lower())
                 stmt = (
                     update(ScraperTargetDB)
                     .where(
-                        ScraperTargetDB.value == value
+                        ScraperTargetDB.platform == plat_enum,
+                        ScraperTargetDB.value == value,
                     )
                     .values(last_watermark=new_watermark)
                 )

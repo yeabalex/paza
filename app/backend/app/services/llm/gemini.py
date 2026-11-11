@@ -5,7 +5,7 @@ import logging
 import httpx
 from app.core.config import settings
 from app.schemas.event import EventExtractionResult
-from app.services.llm.base import BaseLLMProvider, EXTRACTION_SYSTEM_PROMPT, parse_llm_json_events
+from app.services.llm.base import BaseLLMProvider, get_extraction_prompt, parse_llm_json_events
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class GeminiLLMProvider(BaseLLMProvider):
                 "contents": [
                     {
                         "parts": [
-                            {"text": f"{EXTRACTION_SYSTEM_PROMPT}\n\nRaw Post Text:\n{text}"}
+                            {"text": f"{get_extraction_prompt()}\n\nRaw Post Text:\n{text}"}
                         ]
                     }
                 ],

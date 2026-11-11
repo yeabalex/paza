@@ -24,8 +24,10 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T | null> {
   const authHeaders = await getAuthHeaders();
+  const method = (options.method || 'GET').toUpperCase();
+  const maxRetries = method === 'GET' || method === 'HEAD' ? retries : 0;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -45,10 +47,10 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
 
       if (!res.ok) {
         console.error(`[PAZA API] HTTP ${res.status} at ${endpoint} (attempt ${attempt + 1})`);
-        if (res.status === 401 || res.status === 403 || res.status === 404) {
+        if (res.status >= 400 && res.status < 500) {
           return null;
         }
-        if (attempt < retries) continue;
+        if (attempt < maxRetries) continue;
         return null;
       }
 
@@ -56,7 +58,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
       if (!contentType.includes('application/json')) {
         const text = await res.text();
         console.error(`[PAZA API] Non-JSON response at ${endpoint} (content-type: ${contentType}):`, text.substring(0, 200));
-        if (attempt < retries) {
+        if (attempt < maxRetries) {
           await new Promise((r) => setTimeout(r, 500));
           continue;
         }
@@ -67,7 +69,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
     } catch (err) {
       clearTimeout(timeoutId);
       console.error(`[PAZA API] Fetch error at ${endpoint} (attempt ${attempt + 1}):`, err);
-      if (attempt < retries) {
+      if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, 500));
         continue;
       }
