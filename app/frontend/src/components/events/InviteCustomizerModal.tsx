@@ -154,7 +154,7 @@ export function InviteCustomizerModal({
                 inviter={activeInviter}
                 invitee={selectedInvitee}
                 vibe={vibe}
-                onCanvasReady={(canvas) => setCanvasElement(canvas)}
+                onCanvasReady={setCanvasElement}
               />
             </div>
           </div>
@@ -259,7 +259,12 @@ export function InviteCustomizerModal({
           </button>
 
           <div className="invite-footer-secondary">
-            <button type="button" className="invite-action-btn secondary" onClick={handleDownloadImage}>
+            <button
+              type="button"
+              className="invite-action-btn secondary"
+              onClick={handleDownloadImage}
+              disabled={!canvasElement}
+            >
               <Download size={16} />
               <span>Save Image</span>
             </button>

@@ -48,7 +48,12 @@ export function InviteCardHTML({
   onCanvasReady,
 }: InviteCardHTMLProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const onCanvasReadyRef = useRef(onCanvasReady);
   const theme = VIBE_THEMES[vibe];
+
+  useEffect(() => {
+    onCanvasReadyRef.current = onCanvasReady;
+  }, [onCanvasReady]);
 
   const inviterName = inviter.first_name || inviter.username || 'Friend';
   const inviteeName = invitee
@@ -56,14 +61,15 @@ export function InviteCardHTML({
     : '';
 
   const startDate = event.start_datetime ? new Date(event.start_datetime) : null;
-  const dateStr = startDate
+  const isValidStart = startDate !== null && !Number.isNaN(startDate.getTime());
+  const dateStr = isValidStart && startDate
     ? startDate.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
       }).toUpperCase()
     : 'DATE TBA';
-  const timeStr = startDate
+  const timeStr = isValidStart && startDate
     ? startDate.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
@@ -74,23 +80,30 @@ export function InviteCardHTML({
   const venue = event.venue_name || 'Addis Ababa';
 
   useEffect(() => {
-    if (!cardRef.current || !onCanvasReady) return;
+    if (!cardRef.current || !onCanvasReadyRef.current) return;
 
+    let cancelled = false;
     const timer = setTimeout(() => {
-      html2canvas(cardRef.current!, {
+      if (cancelled || !cardRef.current) return;
+      html2canvas(cardRef.current, {
         scale: 2,
         useCORS: true,
         backgroundColor: null,
         logging: false,
-        width: cardRef.current!.offsetWidth,
-        height: cardRef.current!.offsetHeight,
+        width: cardRef.current.offsetWidth,
+        height: cardRef.current.offsetHeight,
       }).then((canvas) => {
-        onCanvasReady(canvas);
+        if (!cancelled) {
+          onCanvasReadyRef.current?.(canvas);
+        }
       });
     }, 150);
 
-    return () => clearTimeout(timer);
-  }, [event, inviter, invitee, vibe, onCanvasReady]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [event, inviter, invitee, vibe]);
 
   return (
     <div

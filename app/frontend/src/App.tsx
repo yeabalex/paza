@@ -79,6 +79,8 @@ export function App() {
   useEffect(() => {
     if (!authLoaded || !isClerkEnabled || !isSignedIn || !clerkUser) return;
 
+    let cancelled = false;
+
     const initApp = async () => {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -111,6 +113,8 @@ export function App() {
           fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null),
         ]);
 
+        if (cancelled) return;
+
         if (fetchedInterests && fetchedInterests.length > 0) {
           setAvailableInterests(fetchedInterests);
         }
@@ -133,6 +137,7 @@ export function App() {
           if (profile.telegram_id) {
             fetchSavedScrapedEvents(profile.telegram_id)
               .then((savedList) => {
+                if (cancelled) return;
                 const map: Record<string, boolean> = {};
                 for (const item of savedList) {
                   if (item?.id) map[item.id] = true;
@@ -146,7 +151,7 @@ export function App() {
           if (eventIdParam && !ticketCodeParam) {
             fetchEventDetail(eventIdParam)
               .then((detail) => {
-                if (detail) setSelectedEvent(detail);
+                if (!cancelled && detail) setSelectedEvent(detail);
               })
               .catch(() => {});
           }
@@ -163,56 +168,76 @@ export function App() {
         }
       } catch (err) {
         console.error('Error initializing authenticated session:', err);
-        setViewState('auth_error');
+        if (!cancelled) setViewState('auth_error');
       }
     };
 
     initApp();
+    return () => {
+      cancelled = true;
+    };
   }, [authLoaded, isClerkEnabled, isSignedIn, clerkUser, authRetryTick]);
 
   // Load first page when feed/category/activeTab changes (strictly requires signed-in session)
   useEffect(() => {
+    if (viewState !== 'feed' || !isClerkEnabled || !isSignedIn || !clerkUser || !user) return;
+
+    let cancelled = false;
+
     const loadFirstPage = async () => {
       setIsLoadingEvents(true);
       setHasMore(true);
 
       fetchCategories().then((cats) => {
-        if (cats && cats.length > 0) {
+        if (!cancelled && cats && cats.length > 0) {
           setCategories(cats);
         }
       });
 
       if (activeTab === 'saved') {
         if (!user?.telegram_id) {
-          setEvents([]);
-          setHasMore(false);
-          setIsLoadingEvents(false);
+          if (!cancelled) {
+            setEvents([]);
+            setHasMore(false);
+            setIsLoadingEvents(false);
+          }
           return;
         }
         const savedEvts = await fetchSavedScrapedEvents(user.telegram_id);
-        setEvents(savedEvts);
-        setHasMore(false);
+        if (!cancelled) {
+          setEvents(savedEvts);
+          setHasMore(false);
+        }
       } else if (activeTab === 'tickets') {
         if (!user?.telegram_id) {
-          setEvents([]);
-          setHasMore(false);
-          setIsLoadingEvents(false);
+          if (!cancelled) {
+            setEvents([]);
+            setHasMore(false);
+            setIsLoadingEvents(false);
+          }
           return;
         }
         const rsvpEvts = await fetchUserRsvps(user.telegram_id);
-        setEvents(rsvpEvts);
-        setHasMore(false);
+        if (!cancelled) {
+          setEvents(rsvpEvts);
+          setHasMore(false);
+        }
       } else {
         const initialEvents = await fetchExploreEvents(activeCategory, 0, timeframe);
-        setEvents(initialEvents);
-        setHasMore(initialEvents.length >= EXPLORE_PAGE_SIZE);
+        if (!cancelled) {
+          setEvents(initialEvents);
+          setHasMore(initialEvents.length >= EXPLORE_PAGE_SIZE);
+        }
       }
-      setIsLoadingEvents(false);
+      if (!cancelled) {
+        setIsLoadingEvents(false);
+      }
     };
 
-    if (viewState === 'feed' && isClerkEnabled && isSignedIn && clerkUser && user) {
-      loadFirstPage();
-    }
+    loadFirstPage();
+    return () => {
+      cancelled = true;
+    };
   }, [activeCategory, activeTab, timeframe, viewState, isClerkEnabled, isSignedIn, clerkUser, user]);
 
   const loadNextPage = useCallback(async () => {
@@ -294,9 +319,9 @@ export function App() {
       } else {
         fetchEventDetail(eid)
           .then((detail) => {
-            if (detail) setSelectedEvent(detail);
+            setSelectedEvent(detail);
           })
-          .catch(() => {});
+          .catch(() => setSelectedEvent(null));
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -339,6 +364,8 @@ export function App() {
         .then((ok) => {
           if (!ok) {
             setJoinedEvents((prev) => ({ ...prev, [eventId]: !willSave }));
+          } else if (activeTab === 'saved' && !willSave) {
+            setEvents((prev) => prev.filter((e) => e.id !== eventId));
           }
         })
         .catch(() => {

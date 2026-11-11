@@ -46,11 +46,14 @@ export async function fetchCategories(): Promise<CategoryInfo[]> {
   if (cached) return cached;
 
   const data = await apiFetch<CategoryInfo[]>('/events/categories');
-  const result = data || [];
+  if (!data) return [];
 
-  saveToCache(cacheKey, result);
+  // Only cache non-empty successful responses so transient errors never lock the UI
+  if (data.length > 0) {
+    saveToCache(cacheKey, data);
+  }
 
-  return result;
+  return data;
 }
 
 export async function fetchExploreEvents(category?: string, skip = 0, timeframe: 'upcoming' | 'past' | 'all' = 'upcoming'): Promise<EventItem[]> {
@@ -66,11 +69,11 @@ export async function fetchExploreEvents(category?: string, skip = 0, timeframe:
   if (cached) return cached;
 
   const data = await apiFetch<EventItem[]>(`/events/explore${query}`);
-  const result = data || [];
+  if (!data) return [];
 
-  saveToCache(cacheKey, result);
+  saveToCache(cacheKey, data);
 
-  return result;
+  return data;
 }
 
 export async function fetchForYouEvents(telegramId: number, category?: string): Promise<EventItem[]> {
@@ -85,12 +88,11 @@ export async function fetchForYouEvents(telegramId: number, category?: string): 
   if (cached) return cached;
 
   const data = await apiFetch<EventItem[]>(`/events/for-you${query}`);
-  const result = data || [];
+  if (!data) return [];
 
-  saveToCache(cacheKey, result);
-  // saveToCache(cacheKey, result);
+  saveToCache(cacheKey, data);
 
-  return result;
+  return data;
 }
 
 export async function saveScrapedEvent(telegramId: number, event: EventItem): Promise<boolean> {

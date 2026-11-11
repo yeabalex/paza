@@ -617,7 +617,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                   <input
                     id="rsvp-receipt-upload"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     onChange={handleFileChange}
                     disabled={isUploading}
                     style={{
@@ -687,7 +687,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isUploading}
               style={{
                 flex: 2,
                 padding: '12px',
