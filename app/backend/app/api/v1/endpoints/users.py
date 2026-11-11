@@ -196,7 +196,7 @@ async def search_users(
         return [
             UserSearchResult(
                 id=str(u.id),
-                telegram_id=u.telegram_id,
+                telegram_id=u.telegram_id if u.telegram_id is not None else deterministic_numeric_id(str(u.id)),
                 full_name=u.full_name or u.username or "User",
                 username=u.username if u.username else None,
                 photo_url=None,

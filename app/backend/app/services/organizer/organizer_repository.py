@@ -73,9 +73,11 @@ class OrganizerRepository:
     ) -> User:
         """Authenticates or provisions a user via Google OAuth profile."""
         clean_email = email.lower().strip()
-        stmt = select(User).where((User.google_id == google_id) | (User.email == clean_email))
-        res = await db.execute(stmt)
+        res = await db.execute(select(User).where(User.google_id == google_id))
         user = res.scalar_one_or_none()
+        if not user:
+            res = await db.execute(select(User).where(User.email == clean_email))
+            user = res.scalar_one_or_none()
 
         if user:
             if not user.google_id:

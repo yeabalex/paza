@@ -14,8 +14,26 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+class UploadValidationError(ValueError):
+    """Raised when an uploaded media file fails type or size validation."""
+
+    def __init__(self, detail: str, status_code: int = 400):
+        self.detail = detail
+        self.status_code = status_code
+        super().__init__(detail)
+
+
 class S3StorageService:
     """Service to handle AWS S3 media uploads matching Terraform infrastructure."""
+
+    MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+    ALLOWED_IMAGE_MIME_TO_EXT = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }
 
     def __init__(self):
         self.bucket_name = settings.S3_BUCKET_NAME
@@ -38,12 +56,24 @@ class S3StorageService:
         return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{key}"
 
     async def upload_file(self, file: UploadFile, folder: str = "uploads") -> str:
-        """Upload an UploadFile to AWS S3, falling back to local disk when unconfigured."""
-        contents = await file.read()
-        file_ext = os.path.splitext(file.filename or "")[1].lower() or ".webp"
+        """Validate and upload a raster image UploadFile to AWS S3 with local fallback."""
+        content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+        file_ext = self.ALLOWED_IMAGE_MIME_TO_EXT.get(content_type)
+        if not file_ext:
+            raise UploadValidationError(
+                "Uploaded file must be a PNG, JPEG, WebP, or GIF image.",
+                status_code=400,
+            )
+
+        contents = await file.read(self.MAX_UPLOAD_BYTES + 1)
+        if len(contents) > self.MAX_UPLOAD_BYTES:
+            raise UploadValidationError(
+                "Uploaded image must be 10MB or smaller.",
+                status_code=413,
+            )
+
         clean_folder = folder.strip("/")
         key = f"{clean_folder}/{uuid.uuid4().hex}{file_ext}"
-        content_type = file.content_type or "image/webp"
 
         s3_client = self._get_s3_client()
         if s3_client:

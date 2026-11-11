@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.services.cache.redis_event_storage import RedisEventStorage
 from app.services.event.event_repository import EventRepository
 from app.services.storage import s3_storage_service
+from app.services.storage.s3_service import UploadValidationError
 from app.schemas.event import (
     CategoryInfo,
     EventDetailSchema,
@@ -392,14 +393,11 @@ async def upload_rsvp_receipt(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_web_user),
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be an image (JPEG, PNG, WebP).",
-        )
     try:
         url = await s3_storage_service.upload_file(file=file, folder="rsvps/receipts")
         return {"url": url}
+    except UploadValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except Exception as e:
         logger.error(f"Error uploading RSVP receipt image: {e}")
         raise HTTPException(
@@ -438,6 +436,8 @@ async def send_event_invite(
         if image:
             try:
                 image_url = await s3_storage_service.upload_file(file=image, folder="invites")
+            except UploadValidationError as exc:
+                raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
             except Exception as upload_err:
                 logger.error(f"Failed to upload invite artwork image: {upload_err}")
 

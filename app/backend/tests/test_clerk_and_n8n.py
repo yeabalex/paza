@@ -779,4 +779,152 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
         finally:
             app.dependency_overrides.pop(get_db, None)
 
+    async def test_upload_rejects_svg_and_oversized_images(self):
+        import io
+        from app.services.storage.s3_service import S3StorageService, UploadValidationError
+        from starlette.datastructures import Headers, UploadFile
+
+        svc = S3StorageService()
+        svg_file = UploadFile(
+            file=io.BytesIO(b"<svg><script>alert(1)</script></svg>"),
+            filename="xss.svg",
+            headers=Headers({"content-type": "image/svg+xml"}),
+        )
+        with self.assertRaises(UploadValidationError) as svg_ctx:
+            await svc.upload_file(svg_file, folder="rsvps/receipts")
+        self.assertEqual(svg_ctx.exception.status_code, 400)
+
+        oversized = UploadFile(
+            file=io.BytesIO(b"x" * (svc.MAX_UPLOAD_BYTES + 1)),
+            filename="huge.png",
+            headers=Headers({"content-type": "image/png"}),
+        )
+        with self.assertRaises(UploadValidationError) as size_ctx:
+            await svc.upload_file(oversized, folder="rsvps/receipts")
+        self.assertEqual(size_ctx.exception.status_code, 413)
+
+        # Verify HTTP endpoint returns 400 for SVG upload
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        token = jwt.encode(
+            {"sub": "user_upload_1", "email": "up@paza.et", "exp": int(time.time()) + 300},
+            priv,
+            algorithm="RS256",
+        )
+        with patch.object(security_module, "clerk_verifier", verifier):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                bad_res = await client.post(
+                    "/api/v1/events/upload-receipt",
+                    headers={"Authorization": f"Bearer {token}"},
+                    files={"file": ("xss.svg", b"<svg/>", "image/svg+xml")},
+                )
+                self.assertEqual(bad_res.status_code, 400)
+
+    async def test_clerk_provisioning_handles_concurrent_integrity_race(self):
+        from types import SimpleNamespace
+        from sqlalchemy.exc import IntegrityError
+        from app.services.user.user_repository import UserRepository
+
+        raced_user = SimpleNamespace(
+            id=1,
+            clerk_id="user_race_1",
+            telegram_id=security_module.deterministic_numeric_id("user_race_1"),
+            email="race@paza.et",
+            full_name="Race User",
+            username="race",
+            preferred_language="en",
+        )
+        commit_calls = {"n": 0}
+
+        async def _commit():
+            commit_calls["n"] += 1
+            if commit_calls["n"] == 1:
+                raise IntegrityError("INSERT INTO users ...", {}, Exception("duplicate key"))
+
+        fake_db = SimpleNamespace(
+            add=lambda obj: None,
+            commit=_commit,
+            rollback=AsyncMock(),
+            refresh=AsyncMock(),
+            execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: None)),
+        )
+        with patch.object(
+            UserRepository,
+            "get_by_clerk_id",
+            new=AsyncMock(side_effect=[None, raced_user]),
+        ):
+            user = await UserRepository.get_or_create_by_clerk_id(
+                fake_db,
+                clerk_id="user_race_1",
+                email="race@paza.et",
+                full_name="Race User",
+            )
+        self.assertIs(user, raced_user)
+        fake_db.rollback.assert_awaited_once()
+
+    async def test_search_users_handles_null_telegram_id_and_email_503_before_db(self):
+        from types import SimpleNamespace
+        import uuid
+        from app.db.session import get_db
+
+        # 1. Verify /organizers/auth/email checks JWT_SECRET_KEY before creating any DB user
+        with (
+            patch.object(settings, "JWT_SECRET_KEY", ""),
+            patch(
+                "app.api.v1.endpoints.organizers.OrganizerRepository.authenticate_or_register_email",
+                new=AsyncMock(),
+            ) as mock_auth_email,
+        ):
+            async def _noop_db():
+                yield object()
+            app.dependency_overrides[get_db] = _noop_db
+            try:
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    res = await client.post(
+                        "/api/v1/organizers/auth/email",
+                        json={"email": "new@paza.et", "password": "password123"},
+                    )
+                    self.assertEqual(res.status_code, 503)
+                    mock_auth_email.assert_not_awaited()
+            finally:
+                app.dependency_overrides.pop(get_db, None)
+
+        # 2. Verify /users/search handles users with telegram_id=None without ValidationError
+        user_uuid = uuid.uuid4()
+        fake_user = SimpleNamespace(id=user_uuid, telegram_id=None, full_name="Abebe Host", username="abebe")
+
+        class _ListRes:
+            def scalars(self):
+                return SimpleNamespace(all=lambda: [fake_user])
+
+        fake_db = SimpleNamespace(execute=AsyncMock(return_value=_ListRes()))
+
+        async def _fake_search_db():
+            yield fake_db
+
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        token = jwt.encode(
+            {"sub": "user_search_1", "email": "search@paza.et", "exp": int(time.time()) + 300},
+            priv,
+            algorithm="RS256",
+        )
+        app.dependency_overrides[get_db] = _fake_search_db
+        try:
+            with patch.object(security_module, "clerk_verifier", verifier):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    res = await client.get(
+                        "/api/v1/users/search?query=abebe",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    self.assertEqual(res.status_code, 200)
+                    body = res.json()
+                    self.assertEqual(len(body), 1)
+                    self.assertEqual(
+                        body[0]["telegram_id"],
+                        security_module.deterministic_numeric_id(str(user_uuid)),
+                    )
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
 

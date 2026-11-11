@@ -25,6 +25,9 @@ async def lifespan(app: FastAPI):
             from sqlalchemy import text
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id VARCHAR(255);"))
             await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_clerk_id ON users (clerk_id);"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255);"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);"))
             await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS support_phone VARCHAR(50);"))
             await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS social_links JSONB;"))
             await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS username VARCHAR(100);"))

@@ -31,6 +31,7 @@ from app.schemas.organizer import (
 from app.services.organizer.organizer_repository import OrganizerRepository
 from app.services.event.event_repository import EventRepository
 from app.services.storage import s3_storage_service
+from app.services.storage.s3_service import UploadValidationError
 
 import httpx
 
@@ -52,7 +53,8 @@ async def verify_google_id_token(id_token: str) -> Optional[dict]:
             )
             if resp.status_code == 200:
                 data = resp.json()
-                if "sub" in data and "email" in data:
+                email_verified = str(data.get("email_verified", "")).lower() == "true"
+                if "sub" in data and "email" in data and email_verified:
                     return data
     except Exception as e:
         logger.error(f"Google ID token verification failed: {e}")
@@ -132,6 +134,12 @@ async def auth_with_email(
     db: AsyncSession = Depends(get_db)
 ):
     """Authenticate or register organizer via custom email."""
+    if not settings.JWT_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Organizer email/password JWT authentication is not configured."
+        )
+
     try:
         user = await OrganizerRepository.authenticate_or_register_email(
             db=db,
@@ -143,12 +151,6 @@ async def auth_with_email(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(ve)
-        )
-
-    if not settings.JWT_SECRET_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Organizer email/password JWT authentication is not configured."
         )
 
     organizer = await OrganizerRepository.get_organizer_by_user_id(db, user.id)
@@ -299,15 +301,11 @@ async def upload_organizer_logo(
     user_id: uuid.UUID = Depends(get_current_user_id_from_token)
 ):
     """Protected endpoint to upload organizer logo image."""
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be an image (JPEG, PNG, WebP, etc.)."
-        )
-
     try:
         url = await s3_storage_service.upload_file(file=file, folder=f"organizers/{user_id}")
         return {"url": url}
+    except UploadValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except Exception as e:
         logger.error(f"Error uploading logo image for user_id={user_id}: {e}")
         raise HTTPException(
@@ -474,15 +472,11 @@ async def upload_event_image(
     file: UploadFile = File(...),
     organizer = Depends(get_current_organizer_from_token)
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be an image (JPEG, PNG, WebP)."
-        )
-
     try:
         url = await s3_storage_service.upload_file(file=file, folder=f"events/{organizer.id}")
         return {"url": url}
+    except UploadValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except Exception as e:
         logger.error(f"Error uploading event image: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload event image.")

@@ -3,6 +3,7 @@
 import logging
 from typing import List, Optional
 from sqlalchemy import select, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import deterministic_numeric_id
@@ -50,14 +51,28 @@ class UserRepository:
         clean_email = email.lower().strip() if email else None
         user = await UserRepository.get_by_clerk_id(db, clerk_id)
 
+        numeric_id = deterministic_numeric_id(clerk_id)
+
+        def _sync_fields(target_user: User) -> None:
+            if not target_user.clerk_id:
+                target_user.clerk_id = clerk_id
+            if not target_user.telegram_id:
+                target_user.telegram_id = numeric_id
+            if clean_email and not target_user.email:
+                target_user.email = clean_email
+            if full_name and target_user.full_name != full_name:
+                target_user.full_name = full_name
+            if username and target_user.username != username:
+                target_user.username = username
+            if preferred_language and target_user.preferred_language != preferred_language:
+                target_user.preferred_language = preferred_language
+
         if not user and clean_email:
             email_stmt = select(User).where(User.email == clean_email)
             email_res = await db.execute(email_stmt)
-            user = email_res.scalar_one_or_none()
-            if user:
-                user.clerk_id = clerk_id
-
-        numeric_id = deterministic_numeric_id(clerk_id)
+            candidate = email_res.scalar_one_or_none()
+            if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
+                user = candidate
 
         if not user:
             user = User(
@@ -72,18 +87,26 @@ class UserRepository:
             db.add(user)
             logger.info(f"Provisioned new Clerk user [{clerk_id}] (numeric_id={numeric_id})")
         else:
-            if not user.telegram_id:
-                user.telegram_id = numeric_id
-            if clean_email and user.email != clean_email:
-                user.email = clean_email
-            if full_name and user.full_name != full_name:
-                user.full_name = full_name
-            if username and user.username != username:
-                user.username = username
-            if preferred_language and user.preferred_language != preferred_language:
-                user.preferred_language = preferred_language
+            _sync_fields(user)
 
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            existing = await UserRepository.get_by_clerk_id(db, clerk_id)
+            if not existing:
+                existing = await UserRepository.get_by_telegram_id(db, numeric_id)
+            if not existing and clean_email:
+                email_res = await db.execute(select(User).where(User.email == clean_email))
+                candidate = email_res.scalar_one_or_none()
+                if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
+                    existing = candidate
+            if not existing:
+                raise
+            _sync_fields(existing)
+            await db.commit()
+            user = existing
+
         await db.refresh(user)
         return user
 
