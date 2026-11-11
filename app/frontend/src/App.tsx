@@ -14,7 +14,6 @@ import {
 
 import { TopNav } from './components/common/TopNav';
 import { BottomNav } from './components/common/BottomNav';
-import { AuthGate } from './components/auth/AuthGate';
 import { useAppAuth } from './auth/authContext';
 import { CategoryScroll } from './components/events/CategoryScroll';
 import { SearchBar } from './components/events/SearchBar';
@@ -306,25 +305,7 @@ export function App() {
     );
   });
 
-  // Enforce authentication across ALL pages before any view renders
-  if (!authLoaded) {
-    return (
-      <div className="loading-screen">
-        <img src="/logo.png" alt="PAZA Events" className="loading-logo" />
-        <div className="loading-wordmark">PAZA EVENTS</div>
-        <div className="loading-dots">
-          <div className="dot-loader" />
-          <div className="dot-loader" style={{ animationDelay: '0.15s' }} />
-          <div className="dot-loader" style={{ animationDelay: '0.3s' }} />
-        </div>
-      </div>
-    );
-  }
-
-  if (!isClerkEnabled || !isSignedIn || !clerkUser) {
-    return <AuthGate isClerkEnabled={isClerkEnabled} />;
-  }
-
+  // Child of <RequireAuth>, so clerkUser is guaranteed when mounted
   if (verifyTicketParams) {
     return (
       <TicketPassScreen
