@@ -17,6 +17,8 @@ services:
     build:
       context: ./app/frontend
       dockerfile: Dockerfile
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: "${VITE_CLERK_PUBLISHABLE_KEY:-}"
     container_name: paza_frontend
     restart: unless-stopped
     depends_on:

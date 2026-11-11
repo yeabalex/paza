@@ -34,6 +34,9 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255);"))
             await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS screenshot_url TEXT;"))
             await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);"))
+            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS ticket_code VARCHAR(100);"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_rsvps_ticket_code ON event_rsvps (ticket_code);"))
+            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';"))
         logger.info("Database tables initialized successfully.")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
