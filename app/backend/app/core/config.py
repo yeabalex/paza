@@ -1,5 +1,6 @@
 """Core configuration module."""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,22 +13,13 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
 
     # PostgreSQL Database Settings
-    POSTGRES_SERVER: str = "localhost"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
-    POSTGRES_DB: str = "addis_event_db"
-    DATABASE_URL: str | None = None
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/addis_event_db"
 
     @property
     def sqlalchemy_database_uri(self) -> str:
-        if self.DATABASE_URL:
-            return self.DATABASE_URL
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return self.DATABASE_URL
 
     # Redis Settings
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # LLM API Keys
@@ -35,65 +27,74 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     GROQ_API_KEY: str = ""
 
-    # Security / Auth Settings
+    # Legacy Organizer JWT Fallback (unused when using Clerk)
     JWT_SECRET_KEY: str = ""
-    JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_DAYS: int = 30
-    GOOGLE_CLIENT_ID: str = ""
+
+    # Clerk Authentication Settings
+    VITE_CLERK_PUBLISHABLE_KEY: str = ""
+    CLERK_PUBLISHABLE_KEY: str = ""
+    CLERK_SECRET_KEY: str = ""
+
+    # n8n Two-Way Integration Settings
     PIPELINE_API_KEY: str = ""
+    N8N_WEBHOOK_URL: str = ""
+    N8N_API_KEY: str = ""
+    N8N_API_KEY_HEADER: str = "X-Api-Key"
+    N8N_WEBHOOK_TIMEOUT_SECONDS: float = 15.0
+
+    # Telegram Bot Notification Settings (restricted to single chat ID)
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
 
     # Web App Settings
     WEB_APP_URL: str = "http://localhost:3000"
     ORGANIZER_PORTAL_URL: str = "https://paza-organizers.netlify.app"
 
+    @property
+    def MINI_APP_URL(self) -> str:
+        """Backwards-compatibility alias for WEB_APP_URL."""
+        return self.WEB_APP_URL
+
     # Scraper Session Credentials
     INSTAGRAM_USERNAME: str = ""
-    INSTAGRAM_PASSWORD: str = ""
     INSTAGRAM_SESSION_ID: str = ""
     TIKTOK_SESSION_ID: str = ""
 
-    # Cloudflare R2 Storage Settings
-    R2_ACCOUNT_ID: str = ""
-    R2_ACCESS_KEY_ID: str = ""
-    R2_SECRET_ACCESS_KEY: str = ""
-    R2_BUCKET_NAME: str = "paza-events"
-    R2_PUBLIC_URL: str = ""
+    # AWS S3 Storage Settings (uses ~/.aws/credentials locally or EC2 IAM role in prod)
+    AWS_REGION: str = "us-east-1"
+    S3_BUCKET_NAME: str = "paza-events-media"
+    S3_PUBLIC_URL: str = ""
     UPLOAD_DIR: str = "static/uploads"
 
-    # Cloudinary Storage Settings
-    CLOUDINARY_CLOUD_NAME: str = ""
-    CLOUDINARY_API_KEY: str = ""
-    CLOUDINARY_API_SECRET: str = ""
-    CLOUDINARY_URL: str = ""
-
-    from pydantic import field_validator
-
-    @field_validator(
-        "PORT",
-        "POSTGRES_PORT",
-        "REDIS_PORT",
-        "JWT_ACCESS_TOKEN_EXPIRE_DAYS",
-        mode="before",
-    )
+    @field_validator("PORT", "JWT_ACCESS_TOKEN_EXPIRE_DAYS", mode="before")
     @classmethod
     def parse_empty_int(cls, v, info):
         if v == "" or v is None:
-            defaults = {
-                "PORT": 8000,
-                "POSTGRES_PORT": 5432,
-                "REDIS_PORT": 6379,
-                "JWT_ACCESS_TOKEN_EXPIRE_DAYS": 30,
-            }
-            return defaults.get(info.field_name, 30)
+            return {"PORT": 8000, "JWT_ACCESS_TOKEN_EXPIRE_DAYS": 30}.get(info.field_name, 30)
         return int(v)
 
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def parse_empty_bool(cls, v):
+        if v == "" or v is None:
+            return True
+        if isinstance(v, bool):
+            return v
+        return str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    @field_validator("N8N_WEBHOOK_TIMEOUT_SECONDS", mode="before")
+    @classmethod
+    def parse_empty_float(cls, v):
+        if v == "" or v is None:
+            return 15.0
+        return float(v)
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
     )
 
 
 settings = Settings()
-
-

@@ -34,3 +34,9 @@ variable "ssh_user" {
   default     = "deploy_user"
 }
 
+variable "s3_media_bucket_name" {
+  description = "Optional explicit S3 bucket name for media uploads (defaults to project-env-account-media)"
+  type        = string
+  default     = ""
+}
+

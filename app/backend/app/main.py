@@ -22,6 +22,8 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
             from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id VARCHAR(255);"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_clerk_id ON users (clerk_id);"))
             await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS support_phone VARCHAR(50);"))
             await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS social_links JSONB;"))
             await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS username VARCHAR(100);"))
@@ -61,7 +63,8 @@ app.add_middleware(
         "http://100.89.217.81:5174",
         "https://paza-bot.netlify.app",
         "https://paza-organizers.netlify.app",
-        settings.MINI_APP_URL,
+        "https://paza.yab.et",
+        settings.WEB_APP_URL,
     ],
     allow_origin_regex=r"https://.*\.netlify\.app|https://.*\.ngrok-free\.app|https://.*\.ngrok\.io|http://localhost:.*|http://127\.0\.0\.1:.*|http://100\..*|http://192\.168\..*|http://10\..*",
     allow_credentials=True,

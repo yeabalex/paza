@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Upload, CreditCard, User, FileText, ExternalLink } from 'lucide-react';
 import type { EventItem, RsvpUser, User as AppUser } from '../../types';
 import type { EventDetailItem } from '../../api/events';
+import { getAuthHeaders } from '../../api/client';
 import { markGoing } from '../../api/events';
 import { openExternalUrl } from '../../utils/navigation';
 
@@ -78,13 +79,10 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const userId = typeof window !== 'undefined' ? localStorage.getItem('paza_user_id') : null;
+      const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/v1/events/upload-receipt', {
         method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true',
-          ...(userId ? { 'X-User-Id': userId } : {}),
-        },
+        headers: authHeaders,
         body: formData,
       });
 

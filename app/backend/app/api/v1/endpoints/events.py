@@ -11,7 +11,7 @@ from app.core.security import get_current_web_user, require_api_key
 from app.db.session import get_db
 from app.services.cache.redis_event_storage import RedisEventStorage
 from app.services.event.event_repository import EventRepository
-from app.services.storage import cloudinary_storage_service, r2_storage_service
+from app.services.storage import s3_storage_service
 from app.schemas.event import (
     CategoryInfo,
     EventDetailSchema,
@@ -208,6 +208,13 @@ async def list_rsvps(
 # USER-ACTION ENDPOINTS (Web User)
 # ════════════════════════════════════════════════════════════════════════════════
 
+def _resolve_target_user_id(current_user: dict, requested_telegram_id: Optional[int] = None) -> int:
+    """Enforce verified Clerk user ID when authenticated via Clerk, else allow legacy fallback."""
+    if current_user.get("auth_provider") == "clerk":
+        return int(current_user["user_id"])
+    return requested_telegram_id or int(current_user.get("user_id", 999888777))
+
+
 @router.post(
     "/save-scraped",
     summary="Save Scraped Event to PostgreSQL DB",
@@ -219,7 +226,7 @@ async def save_scraped_event(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        target_id = payload.telegram_id or current_user.get("user_id", 999888777)
+        target_id = _resolve_target_user_id(current_user, payload.telegram_id)
         await EventRepository.save_scraped_event(
             db=db,
             telegram_id=target_id,
@@ -247,7 +254,7 @@ async def remove_saved_scraped_event(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        target_id = telegram_id or current_user.get("user_id", 999888777)
+        target_id = _resolve_target_user_id(current_user, telegram_id)
         removed = await EventRepository.remove_saved_scraped_event(
             db=db, telegram_id=target_id, event_id=event_id
         )
@@ -274,7 +281,7 @@ async def get_saved_scraped_events(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        target_id = telegram_id or current_user.get("user_id", 999888777)
+        target_id = _resolve_target_user_id(current_user, telegram_id)
         return await EventRepository.get_saved_scraped_events(db=db, telegram_id=target_id)
     except Exception as e:
         logger.error(f"Failed to fetch saved scraped events: {e}")
@@ -295,7 +302,7 @@ async def get_user_rsvps(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        target_id = telegram_id or current_user.get("user_id", 999888777)
+        target_id = _resolve_target_user_id(current_user, telegram_id)
         return await EventRepository.get_user_rsvps(db=db, redis_storage=redis_event_storage, telegram_id=target_id)
     except Exception as e:
         logger.error(f"Failed to fetch user rsvp events: {e}")
@@ -320,8 +327,7 @@ async def mark_going(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        if not body.telegram_id:
-            body.telegram_id = current_user.get("user_id", 999888777)
+        body.telegram_id = _resolve_target_user_id(current_user, body.telegram_id)
         await EventRepository.mark_rsvp(db=db, body=body)
         return {"status": "success", "message": "RSVP saved"}
     except Exception as e:
@@ -344,7 +350,7 @@ async def remove_going(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        target_id = telegram_id or current_user.get("user_id", 999888777)
+        target_id = _resolve_target_user_id(current_user, telegram_id)
         removed = await EventRepository.remove_rsvp(
             db=db, event_id=event_id, telegram_id=target_id
         )
@@ -363,17 +369,14 @@ async def remove_going(
 @router.post(
     "/upload-receipt",
     summary="Upload RSVP Payment Receipt Screenshot",
-    description="Uploads RSVP payment receipt screenshot to Cloudinary / R2 CDN."
+    description="Uploads RSVP payment receipt screenshot to AWS S3 storage."
 )
 async def upload_rsvp_receipt(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_web_user),
 ):
     try:
-        if cloudinary_storage_service._is_configured():
-            url = await cloudinary_storage_service.upload_file(file=file, folder="paza/rsvps/receipts")
-        else:
-            url = await r2_storage_service.upload_file(file=file, folder="rsvps/receipts")
+        url = await s3_storage_service.upload_file(file=file, folder="rsvps/receipts")
         return {"url": url}
     except Exception as e:
         logger.error(f"Error uploading RSVP receipt image: {e}")
@@ -412,10 +415,7 @@ async def send_event_invite(
         image_url = None
         if image:
             try:
-                if cloudinary_storage_service._is_configured():
-                    image_url = await cloudinary_storage_service.upload_file(file=image, folder="paza/invites")
-                else:
-                    image_url = await r2_storage_service.upload_file(file=image, folder="invites")
+                image_url = await s3_storage_service.upload_file(file=image, folder="invites")
             except Exception as upload_err:
                 logger.error(f"Failed to upload invite artwork image: {upload_err}")
 

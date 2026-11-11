@@ -96,6 +96,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -110,51 +112,32 @@ jobs:
       - name: Write backend .env file on runner
         run: |
           cat > .env << 'ENVEOF'
-          PROJECT_NAME="${{ secrets.PROJECT_NAME }}"
-          API_V1_STR="${{ secrets.API_V1_STR }}"
           ENVIRONMENT="${{ secrets.ENVIRONMENT }}"
           DEBUG="${{ secrets.DEBUG }}"
-          PORT="${{ secrets.PORT }}"
-          HOST="${{ secrets.HOST }}"
+          WEB_APP_URL="${{ secrets.WEB_APP_URL }}"
 
-          POSTGRES_SERVER="${{ secrets.POSTGRES_SERVER }}"
-          POSTGRES_PORT="${{ secrets.POSTGRES_PORT }}"
-          POSTGRES_USER="${{ secrets.POSTGRES_USER }}"
-          POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
-          POSTGRES_DB="${{ secrets.POSTGRES_DB }}"
           DATABASE_URL="${{ secrets.DATABASE_URL }}"
-
-          REDIS_HOST="${{ secrets.REDIS_HOST }}"
-          REDIS_PORT="${{ secrets.REDIS_PORT }}"
           REDIS_URL="${{ secrets.REDIS_URL }}"
+
+          VITE_CLERK_PUBLISHABLE_KEY="${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}"
+          CLERK_SECRET_KEY="${{ secrets.CLERK_SECRET_KEY }}"
+
+          PIPELINE_API_KEY="${{ secrets.PIPELINE_API_KEY }}"
+          N8N_WEBHOOK_URL="${{ secrets.N8N_WEBHOOK_URL }}"
+          N8N_API_KEY="${{ secrets.N8N_API_KEY }}"
+          TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          TELEGRAM_CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
 
           GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
           DEEPSEEK_API_KEY="${{ secrets.DEEPSEEK_API_KEY }}"
           GROQ_API_KEY="${{ secrets.GROQ_API_KEY }}"
 
-          JWT_SECRET_KEY="${{ secrets.JWT_SECRET_KEY }}"
-          JWT_ALGORITHM="${{ secrets.JWT_ALGORITHM }}"
-          JWT_ACCESS_TOKEN_EXPIRE_DAYS="${{ secrets.JWT_ACCESS_TOKEN_EXPIRE_DAYS }}"
-          GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
-          PIPELINE_API_KEY="${{ secrets.PIPELINE_API_KEY }}"
-
-          WEB_APP_URL="${{ secrets.WEB_APP_URL }}"
+          AWS_REGION="${{ secrets.AWS_REGION }}"
+          S3_BUCKET_NAME="${{ secrets.S3_BUCKET_NAME }}"
 
           INSTAGRAM_USERNAME="${{ secrets.INSTAGRAM_USERNAME }}"
-          INSTAGRAM_PASSWORD="${{ secrets.INSTAGRAM_PASSWORD }}"
           INSTAGRAM_SESSION_ID="${{ secrets.INSTAGRAM_SESSION_ID }}"
           TIKTOK_SESSION_ID="${{ secrets.TIKTOK_SESSION_ID }}"
-
-          CLOUDINARY_CLOUD_NAME="${{ secrets.CLOUDINARY_CLOUD_NAME }}"
-          CLOUDINARY_API_KEY="${{ secrets.CLOUDINARY_API_KEY }}"
-          CLOUDINARY_API_SECRET="${{ secrets.CLOUDINARY_API_SECRET }}"
-          CLOUDINARY_URL="${{ secrets.CLOUDINARY_URL }}"
-
-          R2_ACCOUNT_ID="${{ secrets.R2_ACCOUNT_ID }}"
-          R2_ACCESS_KEY_ID="${{ secrets.R2_ACCESS_KEY_ID }}"
-          R2_SECRET_ACCESS_KEY="${{ secrets.R2_SECRET_ACCESS_KEY }}"
-          R2_BUCKET_NAME="${{ secrets.R2_BUCKET_NAME }}"
-          R2_PUBLIC_URL="${{ secrets.R2_PUBLIC_URL }}"
           ENVEOF
           chmod 600 .env
 
@@ -189,7 +172,7 @@ jobs:
           FRONTEND_IMAGE=$(echo "${FRONTEND_IMAGE_RAW}" | tr '[:upper:]' '[:lower:]')
 
           ssh -i ~/.ssh/deploy_key ${SSH_USER}@${SERVER_IP} \
-            APP_DIR="$APP_DIR" BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" GITHUB_ACTOR="$GITHUB_ACTOR" \
+            APP_DIR="$APP_DIR" BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" GITHUB_ACTOR="$GITHUB_ACTOR" SERVER_IP="$SERVER_IP" \
             'bash -s' << 'SSHEOF'
             set -e
             cd "$APP_DIR"
@@ -225,6 +208,28 @@ jobs:
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -af
+
+            # Configure Caddy for paza.yab.et (frontend + forwarded /api & /static to backend)
+            sudo tee /etc/caddy/Caddyfile > /dev/null << CADDYEOF
+            paza.yab.et, ${SERVER_IP}.nip.io {
+                respond /.env* "Access Denied" 403
+                respond /.git* "Access Denied" 403
+
+                handle /api/* {
+                    reverse_proxy localhost:8000
+                }
+
+                handle /static/* {
+                    reverse_proxy localhost:8000
+                }
+
+                handle {
+                    reverse_proxy localhost:3000
+                }
+            }
+            CADDYEOF
+            sudo caddy validate --config /etc/caddy/Caddyfile
+            sudo systemctl reload caddy || sudo systemctl restart caddy
           SSHEOF
 
       # Clean up SSH key from runner

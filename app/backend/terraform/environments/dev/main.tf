@@ -141,6 +141,7 @@ resource "aws_instance" "dev_server" {
   subnet_id              = aws_subnet.dev_subnet.id
   vpc_security_group_ids = [aws_security_group.dev_sg.id]
   key_name               = aws_key_pair.dev_key.key_name
+  iam_instance_profile   = aws_iam_instance_profile.dev_ec2_profile.name
 
   root_block_device {
     volume_size           = 20
@@ -217,4 +218,103 @@ resource "aws_eip" "dev_eip" {
   tags = {
     Name = "${var.project_name}-${var.environment}-eip"
   }
+}
+
+# --- S3 MEDIA STORAGE BUCKET & EC2 IAM ROLE ---
+data "aws_caller_identity" "current" {}
+
+locals {
+  media_bucket_name = var.s3_media_bucket_name != "" ? var.s3_media_bucket_name : "${var.project_name}-${var.environment}-media-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket" "media_bucket" {
+  bucket = local.media_bucket_name
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-media"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "media_public_access" {
+  bucket = aws_s3_bucket.media_bucket.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "media_public_read" {
+  bucket     = aws_s3_bucket.media_bucket.id
+  depends_on = [aws_s3_bucket_public_access_block.media_public_access]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadMedia"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.media_bucket.arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_cors_configuration" "media_cors" {
+  bucket = aws_s3_bucket.media_bucket.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"]
+    max_age_seconds = 3600
+  }
+}
+
+resource "aws_iam_role" "dev_ec2_role" {
+  name = "${var.project_name}-${var.environment}-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "dev_ec2_s3_policy" {
+  name = "${var.project_name}-${var.environment}-s3-access"
+  role = aws_iam_role.dev_ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.media_bucket.arn,
+          "${aws_s3_bucket.media_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "dev_ec2_profile" {
+  name = "${var.project_name}-${var.environment}-ec2-profile"
+  role = aws_iam_role.dev_ec2_role.name
 }

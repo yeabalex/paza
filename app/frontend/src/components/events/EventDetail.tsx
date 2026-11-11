@@ -24,6 +24,7 @@ import { InviteCustomizerModal } from './InviteCustomizerModal';
 import { OrganizerHeaderBadge } from './OrganizerHeaderBadge';
 import { RsvpPaymentModal } from './RsvpPaymentModal';
 import { openExternalUrl } from '../../utils/navigation';
+import { useAppAuth } from '../../auth/authContext';
 
 interface EventDetailProps {
   event: EventItem;
@@ -45,6 +46,7 @@ export function EventDetail({
   telegramUser,
 }: EventDetailProps) {
   const currentUser = user || telegramUser || null;
+  const { isClerkEnabled, isSignedIn, openSignIn } = useAppAuth();
   const [copied, setCopied] = useState(false);
   const [fullDetail, setFullDetail] = useState<EventDetailItem | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
@@ -156,12 +158,19 @@ export function EventDetail({
       )}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
 
   const handleShare = () => {
+    if (isClerkEnabled && !isSignedIn) {
+      openSignIn();
+      return;
+    }
     setShowInviteModal(true);
     setCopied(false);
   };
 
   const handleGoingClick = async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      if (isClerkEnabled) openSignIn();
+      return;
+    }
 
     if (isGoing) {
       // Remove RSVP

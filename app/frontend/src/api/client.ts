@@ -1,8 +1,32 @@
 const API_BASE_URL = '/api/v1';
 
+type TokenProvider = () => Promise<string | null>;
+
+let authTokenProvider: TokenProvider | null = null;
+
+export function setAuthTokenProvider(provider: TokenProvider | null): void {
+  authTokenProvider = provider;
+}
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  let token: string | null = null;
+
+  if (authTokenProvider) {
+    try {
+      token = await authTokenProvider();
+    } catch (err) {
+      console.warn('[PAZA AUTH] Failed to retrieve Clerk session token:', err);
+    }
+  }
+
+  return {
+    'ngrok-skip-browser-warning': 'true',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T | null> {
-  const userId = typeof window !== 'undefined' ? localStorage.getItem('paza_user_id') : null;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('paza_token') : null;
+  const authHeaders = await getAuthHeaders();
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -14,10 +38,8 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-          ...(userId ? { 'X-User-Id': userId } : {}),
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          Accept: 'application/json',
+          ...authHeaders,
           ...options.headers,
         },
       });
@@ -26,32 +48,30 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
 
       if (!res.ok) {
         console.error(`[PAZA API] HTTP ${res.status} at ${endpoint} (attempt ${attempt + 1})`);
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          return null;
+        }
         if (attempt < retries) continue;
         return null;
       }
 
-      // Check content-type to detect ngrok interstitial HTML
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
         const text = await res.text();
         console.error(`[PAZA API] Non-JSON response at ${endpoint} (content-type: ${contentType}):`, text.substring(0, 200));
         if (attempt < retries) {
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 500));
           continue;
         }
         return null;
       }
 
-      const data = await res.json();
-      if (attempt > 0) {
-        console.log(`[PAZA API] Success on retry ${attempt} for ${endpoint}`);
-      }
-      return data as T;
+      return (await res.json()) as T;
     } catch (err) {
       clearTimeout(timeoutId);
       console.error(`[PAZA API] Fetch error at ${endpoint} (attempt ${attempt + 1}):`, err);
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
         continue;
       }
       return null;

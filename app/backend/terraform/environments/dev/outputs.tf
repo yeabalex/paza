@@ -33,3 +33,13 @@ output "key_file_path" {
   description = "Local relative file path where private key is saved"
   value       = local_sensitive_file.private_key.filename
 }
+
+output "s3_bucket_name" {
+  description = "S3 bucket name for uploaded media"
+  value       = aws_s3_bucket.media_bucket.bucket
+}
+
+output "aws_region" {
+  description = "AWS region for S3 and EC2 deployment"
+  value       = var.aws_region
+}

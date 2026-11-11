@@ -96,6 +96,7 @@ async def run_pipeline_gateway(
     llm_router = LLMRouter()
 
     scraped_posts: List[Dict[str, Any]] = []
+    extracted_titles: List[str] = []
     events_extracted_count = 0
     passed_events_skipped_count = 0
     non_events_count = 0
@@ -150,6 +151,8 @@ async def run_pipeline_gateway(
                             continue
 
                         events_extracted_count += 1
+                        if event_res.title:
+                            extracted_titles.append(event_res.title)
                         extracted_event_data = {
                             "title": event_res.title,
                             "description": event_res.description,
@@ -234,6 +237,7 @@ async def run_pipeline_gateway(
     )
     summary["passed_events_skipped"] = passed_events_skipped_count
     summary["passed_events_cleaned"] = cleaned_events_count
+    summary["extracted_titles"] = extracted_titles
 
     # Purge temporary export file
     import os

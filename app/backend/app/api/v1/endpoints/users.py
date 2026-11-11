@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_web_user
+from app.core.clerk import clerk_verifier
+from app.core.security import deterministic_numeric_id, get_current_web_user
+from app.db.models import User
 from app.db.session import get_db
 from app.schemas.user import (
     InterestSchema,
@@ -19,46 +21,84 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _resolve_or_provision_web_user(
+    db: AsyncSession,
+    current_user: dict,
+    user_id: Optional[str] = None,
+    telegram_id: Optional[int] = None,
+    username: Optional[str] = None,
+    full_name: Optional[str] = None,
+) -> User:
+    """Resolve or provision the PostgreSQL User from Clerk claims or fallback guest/header identity."""
+    if current_user.get("auth_provider") == "clerk":
+        clerk_id = current_user["clerk_id"]
+        email = current_user.get("email")
+        resolved_name = current_user.get("full_name") or full_name
+        resolved_username = current_user.get("username") or username
+
+        if not email or not resolved_name:
+            clerk_profile = await clerk_verifier.fetch_user_profile(clerk_id)
+            if clerk_profile:
+                email = email or clerk_profile.get("email")
+                resolved_name = resolved_name or clerk_profile.get("full_name")
+                resolved_username = resolved_username or clerk_profile.get("username")
+
+        return await UserRepository.get_or_create_by_clerk_id(
+            db=db,
+            clerk_id=clerk_id,
+            email=email,
+            full_name=resolved_name or "Web User",
+            username=resolved_username,
+            preferred_language="en",
+        )
+
+    target_id: int
+    if telegram_id:
+        target_id = telegram_id
+    elif user_id:
+        target_id = deterministic_numeric_id(user_id)
+    else:
+        target_id = current_user.get("user_id", 999888777)
+
+    sync_full_name = full_name or current_user.get("full_name") or "Web User"
+    sync_username = username or current_user.get("username")
+    return await UserRepository.get_or_create_user(
+        db=db,
+        telegram_id=target_id,
+        full_name=sync_full_name,
+        username=sync_username,
+        preferred_language="en",
+        force_sync=True,
+    )
+
+
 @router.get(
     "/me",
     response_model=UserProfileSchema,
     summary="Get Current User Profile & Registration Status",
-    description="Fetches or auto-provisions a user profile in PostgreSQL for the Web App."
+    description="Fetches or auto-provisions a user profile in PostgreSQL for the Web App (Clerk or guest fallback)."
 )
 async def get_current_user_profile(
-    user_id: Optional[str] = Query(None, description="Web User identifier"),
+    user_id: Optional[str] = Query(None, description="Web User identifier (legacy fallback)"),
     telegram_id: Optional[int] = Query(None, description="Numeric User ID for backwards compatibility"),
     username: Optional[str] = Query(None, description="User handle"),
     full_name: Optional[str] = Query(None, description="User full name"),
     current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Verifies user ID, auto-creates or syncs user in DB, and returns profile."""
-    # Resolve numeric user ID for database persistence
-    target_id: int
-    if telegram_id:
-        target_id = telegram_id
-    elif user_id:
-        target_id = int(user_id) if user_id.isdigit() else abs(hash(user_id)) % (10**9)
-    else:
-        target_id = current_user.get("user_id", 999888777)
-
-    sync_full_name = full_name or current_user.get("full_name") or "Web User"
-    sync_username = username or current_user.get("username")
-
+    """Verifies user identity, auto-creates or syncs user in DB, and returns profile."""
     try:
-        user = await UserRepository.get_or_create_user(
+        user = await _resolve_or_provision_web_user(
             db=db,
-            telegram_id=target_id,
-            full_name=sync_full_name,
-            username=sync_username,
-            preferred_language="en",
-            force_sync=True
+            current_user=current_user,
+            user_id=user_id,
+            telegram_id=telegram_id,
+            username=username,
+            full_name=full_name,
         )
-
-        profile = await UserRepository.get_user_profile(db, user.telegram_id)
+        profile = await UserRepository.build_user_profile(db, user)
     except Exception as e:
-        logger.error(f"Database error fetching/provisioning profile for user_id={target_id}: {e}")
+        logger.error(f"Database error fetching/provisioning profile: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database temporarily unavailable. Please try again."
@@ -96,25 +136,14 @@ async def update_user_interests(
     db: AsyncSession = Depends(get_db)
 ):
     """Updates user's selected interests in normalized junction table."""
-    target_id: int
-    if req.telegram_id:
-        target_id = req.telegram_id
-    elif req.user_id:
-        target_id = int(req.user_id) if req.user_id.isdigit() else abs(hash(req.user_id)) % (10**9)
-    else:
-        target_id = current_user.get("user_id", 999888777)
-
+    user = await _resolve_or_provision_web_user(
+        db=db,
+        current_user=current_user,
+        user_id=req.user_id,
+        telegram_id=req.telegram_id,
+    )
+    target_id = user.telegram_id or deterministic_numeric_id(str(user.id))
     matching_interests = await UserRepository.update_user_interests(db, target_id, req.interest_slugs)
-    if matching_interests is None:
-        # Create user on the fly if not created yet
-        await UserRepository.get_or_create_user(
-            db=db,
-            telegram_id=target_id,
-            full_name="Web User",
-            username=None,
-            preferred_language="en"
-        )
-        matching_interests = await UserRepository.update_user_interests(db, target_id, req.interest_slugs)
 
     return {
         "message": f"Successfully updated {len(matching_interests or [])} interests for user.",

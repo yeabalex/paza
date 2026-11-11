@@ -11,6 +11,8 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
+ARG VITE_CLERK_PUBLISHABLE_KEY=""
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 RUN npm run build
 
 # Production runtime with Nginx

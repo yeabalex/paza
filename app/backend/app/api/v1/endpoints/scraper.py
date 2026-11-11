@@ -1,22 +1,33 @@
-"""Scraper & Pipeline Trigger Endpoint."""
+"""Scraper & Pipeline Trigger Endpoint with two-way n8n API-key webhook integration."""
 
 import logging
+import uuid
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.core.security import require_api_key
 from app.services.pipeline_gateway import run_pipeline_gateway
 from app.services.cache.redis_event_storage import RedisEventStorage
+from app.services.integrations import PipelineJobRecord, job_store, n8n_client, telegram_notifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class TriggerRequest(BaseModel):
+    callback_url: Optional[str] = None
+    trigger_source: str = "n8n"
+    notify_n8n: bool = True
+    job_id: Optional[str] = None
 
 
 class TriggerResponse(BaseModel):
     message: str
     status: str
     mode: str
+    job_id: str
+    callback_configured: bool = False
 
 
 class CleanupResponse(BaseModel):
@@ -29,13 +40,94 @@ class CleanupResponse(BaseModel):
     cleaned_events: Optional[List[Dict[str, Any]]] = None
 
 
-async def background_pipeline_runner():
-    """Background execution wrapper for pipeline gateway."""
+async def _execute_and_notify(
+    job_id: str,
+    trigger_source: str,
+    triggered_at: str,
+    notify_n8n: bool = True,
+    callback_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Execute pipeline gateway, notify n8n webhook, and fall back to direct Telegram delivery."""
+    job_store.mark_running(job_id)
     try:
         summary = await run_pipeline_gateway()
-        logger.info(f"Background Cron Pipeline Run Summary: {summary}")
-    except Exception as e:
-        logger.error(f"Background Pipeline Run Error: {e}")
+        notified = False
+        if notify_n8n:
+            notified = await n8n_client.notify_pipeline_result(
+                job_id=job_id,
+                status="success",
+                triggered_at=triggered_at,
+                trigger_source=trigger_source,
+                summary=summary,
+                callback_url=callback_url,
+            )
+        telegram_sent = False
+        if not notified:
+            telegram_sent = await telegram_notifier.notify_pipeline_result(
+                job_id=job_id,
+                status="success",
+                trigger_source=trigger_source,
+                summary=summary,
+            )
+        job_store.mark_completed(
+            job_id=job_id,
+            status="success",
+            summary=summary,
+            n8n_notified=notified if notify_n8n else None,
+            telegram_notified=telegram_sent if not notified else None,
+        )
+        logger.info(f"Pipeline job [{job_id}] finished (n8n_notified={notified}, telegram_notified={telegram_sent}).")
+        return summary
+    except Exception as exc:
+        err_msg = str(exc)
+        logger.error(f"Pipeline job [{job_id}] failed: {err_msg}")
+        notified = False
+        if notify_n8n:
+            notified = await n8n_client.notify_pipeline_result(
+                job_id=job_id,
+                status="failed",
+                triggered_at=triggered_at,
+                trigger_source=trigger_source,
+                error=err_msg,
+                callback_url=callback_url,
+            )
+        telegram_sent = False
+        if not notified:
+            telegram_sent = await telegram_notifier.notify_pipeline_result(
+                job_id=job_id,
+                status="failed",
+                trigger_source=trigger_source,
+                error=err_msg,
+            )
+        job_store.mark_completed(
+            job_id=job_id,
+            status="failed",
+            error=err_msg,
+            n8n_notified=notified if notify_n8n else None,
+            telegram_notified=telegram_sent if not notified else None,
+        )
+        raise
+
+
+async def background_pipeline_runner(
+    job_id: str,
+    trigger_source: str,
+    triggered_at: str,
+    notify_n8n: bool = True,
+    callback_url: Optional[str] = None,
+):
+    """Background execution wrapper for pipeline gateway."""
+    try:
+        await _execute_and_notify(
+            job_id=job_id,
+            trigger_source=trigger_source,
+            triggered_at=triggered_at,
+            notify_n8n=notify_n8n,
+            callback_url=callback_url,
+        )
+    except Exception:
+        # Failure is already logged, recorded in job_store, and sent to n8n
+        pass
 
 
 async def background_cleanup_runner(max_age_days: int = 7):
@@ -53,39 +145,81 @@ async def background_cleanup_runner(max_age_days: int = 7):
     "/trigger",
     response_model=TriggerResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Trigger Scraper Pipeline (Cron Gateway Endpoint)",
-    description="Endpoint for Cron jobs or webhooks to trigger the multi-platform scraping & event extraction pipeline. Requires X-Api-Key header.",
+    summary="Trigger Scraper Pipeline (n8n / Cron Gateway Endpoint)",
+    description="Protected by X-Api-Key. Triggers scraping & extraction and notifies n8n webhook with the JSON result.",
     dependencies=[Depends(require_api_key)],
 )
 async def trigger_scraper_pipeline(
     background_tasks: BackgroundTasks,
     async_mode: bool = Query(True, description="If True, runs pipeline asynchronously in background"),
+    payload: Optional[TriggerRequest] = Body(default=None),
 ):
-    """Gateway endpoint called by Cron jobs or external webhooks to start pipeline execution."""
-    logger.info("Pipeline trigger received via API endpoint (authenticated).")
+    """Gateway endpoint called by n8n or Cron jobs to start pipeline execution."""
+    req = payload or TriggerRequest()
+    job_id = (req.job_id or "").strip() or f"job_{uuid.uuid4().hex[:12]}"
+    record = job_store.create(job_id=job_id, trigger_source=req.trigger_source)
+    callback_configured = bool(req.notify_n8n and (req.callback_url or n8n_client.webhook_url) and n8n_client.api_key)
+
+    logger.info(
+        f"Pipeline trigger accepted (job_id={job_id}, source={req.trigger_source}, async={async_mode}, callback={callback_configured})."
+    )
 
     if async_mode:
-        background_tasks.add_task(background_pipeline_runner)
+        background_tasks.add_task(
+            background_pipeline_runner,
+            job_id=job_id,
+            trigger_source=req.trigger_source,
+            triggered_at=record.triggered_at,
+            notify_n8n=req.notify_n8n,
+            callback_url=req.callback_url,
+        )
         return TriggerResponse(
-            message="Scraper pipeline execution triggered in background successfully.",
+            message="Scraper pipeline execution queued in background.",
             status="queued",
-            mode="async"
+            mode="async",
+            job_id=job_id,
+            callback_configured=callback_configured,
         )
 
     # Synchronous execution mode
     try:
-        summary = await run_pipeline_gateway()
+        summary = await _execute_and_notify(
+            job_id=job_id,
+            trigger_source=req.trigger_source,
+            triggered_at=record.triggered_at,
+            notify_n8n=req.notify_n8n,
+            callback_url=req.callback_url,
+        )
         return TriggerResponse(
             message=f"Scraper pipeline execution completed in {summary.get('duration_seconds')}s. Scraped {summary.get('total_posts_scraped')} posts, extracted {summary.get('events_extracted')} events.",
             status="success",
-            mode="sync"
+            mode="sync",
+            job_id=job_id,
+            callback_configured=callback_configured,
         )
     except Exception as e:
-        logger.error(f"Synchronous pipeline execution error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Pipeline execution failed: {str(e)}"
+            detail=f"Pipeline execution failed: {str(e)}",
         )
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=PipelineJobRecord,
+    summary="Get Pipeline Job Execution Status",
+    description="Allows n8n or automation runners to inspect the status and result of a triggered pipeline job. Requires X-Api-Key header.",
+    dependencies=[Depends(require_api_key)],
+)
+async def get_pipeline_job_status(job_id: str):
+    """Fetch execution state and summary for a pipeline job ID."""
+    record = job_store.get(job_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job '{job_id}' not found.",
+        )
+    return record
 
 
 @router.post(

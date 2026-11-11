@@ -18,7 +18,9 @@ class InterestSchema(BaseModel):
 
 class UserProfileSchema(BaseModel):
     id: UUID = Field(..., description="Unique User UUID")
+    clerk_id: Optional[str] = Field(None, description="Clerk user ID")
     telegram_id: Optional[int] = Field(None, description="User numeric ID")
+    email: Optional[str] = Field(None, description="User email address")
     full_name: Optional[str] = Field(None, description="User full name")
     username: Optional[str] = Field(None, description="User username")
     phone_number: Optional[str] = Field(None, description="Phone number")

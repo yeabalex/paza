@@ -642,8 +642,8 @@ class EventRepository:
         event_title = evt_detail.title if evt_detail else "Event"
 
         # Build verification URL
-        mini_app_url = settings.MINI_APP_URL.rstrip('/')
-        verify_url = f"{mini_app_url}/?verify_event_id={clean_id}&ticket_code={rsvp.ticket_code}"
+        web_app_url = settings.WEB_APP_URL.rstrip('/')
+        verify_url = f"{web_app_url}/?verify_event_id={clean_id}&ticket_code={rsvp.ticket_code}"
 
         return {
             "ticket_code": rsvp.ticket_code,

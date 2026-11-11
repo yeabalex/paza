@@ -1,4 +1,4 @@
-import { apiFetch } from './client';
+import { apiFetch, getAuthHeaders } from './client';
 import type { EventItem } from '../types';
 
 export interface CategoryInfo {
@@ -243,14 +243,11 @@ export async function sendEventInvite(params: {
     formData.append('image', params.imageBlob, 'invite_artwork.png');
   }
 
-  const userId = typeof window !== 'undefined' ? localStorage.getItem('paza_user_id') : null;
+  const authHeaders = await getAuthHeaders();
   const res = await fetch('/api/v1/events/send-invite', {
     method: 'POST',
     body: formData,
-    headers: {
-      'ngrok-skip-browser-warning': 'true',
-      ...(userId ? { 'X-User-Id': userId } : {}),
-    },
+    headers: authHeaders,
   });
 
   if (!res.ok) {

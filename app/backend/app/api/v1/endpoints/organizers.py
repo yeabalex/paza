@@ -9,9 +9,11 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile,
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_access_token, decode_access_token
+from app.core.clerk import clerk_verifier
+from app.core.security import create_access_token, resolve_bearer_user
 from app.db.session import get_db
 from app.db.models import Interest
+from app.services.user.user_repository import UserRepository
 from app.schemas.organizer import (
     OrganizerEmailAuthRequest,
     OrganizerEventCreate,
@@ -27,7 +29,7 @@ from app.schemas.organizer import (
 )
 from app.services.organizer.organizer_repository import OrganizerRepository
 from app.services.event.event_repository import EventRepository
-from app.services.storage import r2_storage_service
+from app.services.storage import s3_storage_service
 
 import httpx
 
@@ -56,29 +58,61 @@ async def verify_google_id_token(id_token: str) -> Optional[dict]:
     return None
 
 
-async def get_current_user_id_from_token(authorization: Optional[str] = Header(None)) -> uuid.UUID:
-    """Extracts and verifies JWT token from Authorization header."""
+async def _resolve_user_uuid_from_header(
+    authorization: Optional[str],
+    db: AsyncSession,
+) -> Optional[uuid.UUID]:
+    """Resolve a PostgreSQL User UUID from a Clerk RS256 JWT or legacy HS256 JWT."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+
+    token = authorization.split(" ", 1)[1].strip()
+    token_user = await resolve_bearer_user(token)
+
+    if token_user.get("auth_provider") == "clerk":
+        clerk_id = token_user["clerk_id"]
+        email = token_user.get("email")
+        full_name = token_user.get("full_name")
+        username = token_user.get("username")
+        if not email or not full_name:
+            clerk_profile = await clerk_verifier.fetch_user_profile(clerk_id)
+            if clerk_profile:
+                email = email or clerk_profile.get("email")
+                full_name = full_name or clerk_profile.get("full_name")
+                username = username or clerk_profile.get("username")
+        user = await UserRepository.get_or_create_by_clerk_id(
+            db=db,
+            clerk_id=clerk_id,
+            email=email,
+            full_name=full_name,
+            username=username,
+        )
+        return user.id
+
+    try:
+        return uuid.UUID(str(token_user["id"]))
+    except ValueError:
+        return None
+
+
+async def get_current_user_id_from_token(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
+) -> uuid.UUID:
+    """Extracts and verifies Clerk or legacy JWT token from Authorization header."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Bearer authorization header."
         )
 
-    token = authorization.split(" ")[1]
-    payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired session token."
-        )
-
-    try:
-        return uuid.UUID(payload["sub"])
-    except ValueError:
+    user_id = await _resolve_user_uuid_from_header(authorization, db)
+    if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Malformed user ID in token."
         )
+    return user_id
 
 
 def _is_organizer_profile_complete(organizer) -> bool:
@@ -185,14 +219,12 @@ async def get_current_organizer_session(
     if not authorization or not authorization.startswith("Bearer "):
         return OrganizerSessionResponse(authenticated=False)
 
-    token = authorization.split(" ")[1]
-    payload = decode_access_token(token)
-    if not payload or "sub" not in payload:
+    try:
+        user_id = await _resolve_user_uuid_from_header(authorization, db)
+    except HTTPException:
         return OrganizerSessionResponse(authenticated=False)
 
-    try:
-        user_id = uuid.UUID(payload["sub"])
-    except ValueError:
+    if not user_id:
         return OrganizerSessionResponse(authenticated=False)
 
     user = await OrganizerRepository.get_user_by_id(db, user_id)
@@ -244,13 +276,10 @@ async def create_or_update_organizer_profile(
         )
 
 
-from app.services.storage import cloudinary_storage_service, r2_storage_service
-
-
 @router.post(
     "/upload-logo",
     summary="Upload Organizer Profile Logo",
-    description="Protected endpoint to upload organizer logo picture to Cloudinary / R2 storage."
+    description="Protected endpoint to upload organizer logo picture to AWS S3 storage."
 )
 async def upload_organizer_logo(
     file: UploadFile = File(...),
@@ -264,10 +293,7 @@ async def upload_organizer_logo(
         )
 
     try:
-        if cloudinary_storage_service._is_configured():
-            url = await cloudinary_storage_service.upload_file(file=file, folder=f"paza/organizers/{user_id}")
-        else:
-            url = await r2_storage_service.upload_file(file=file, folder=f"organizers/{user_id}")
+        url = await s3_storage_service.upload_file(file=file, folder=f"organizers/{user_id}")
         return {"url": url}
     except Exception as e:
         logger.error(f"Error uploading logo image for user_id={user_id}: {e}")
@@ -308,13 +334,10 @@ async def check_username_availability(
 
     current_user_id = None
     if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
-        payload = decode_access_token(token)
-        if payload and "sub" in payload:
-            try:
-                current_user_id = uuid.UUID(payload["sub"])
-            except ValueError:
-                pass
+        try:
+            current_user_id = await _resolve_user_uuid_from_header(authorization, db)
+        except HTTPException:
+            current_user_id = None
 
     existing = await OrganizerRepository.get_organizer_by_username(db, clean_username, exclude_user_id=current_user_id)
     if existing:
@@ -439,7 +462,7 @@ async def delete_organizer_event(
 @router.post(
     "/upload-event-image",
     summary="Upload Event Poster Image",
-    description="Uploads event poster image to storage (Cloudinary or R2) and returns the public URL."
+    description="Uploads event poster image to AWS S3 storage and returns the public URL."
 )
 async def upload_event_image(
     file: UploadFile = File(...),
@@ -452,10 +475,7 @@ async def upload_event_image(
         )
 
     try:
-        if cloudinary_storage_service._is_configured():
-            url = await cloudinary_storage_service.upload_file(file=file, folder=f"paza/events/{organizer.id}")
-        else:
-            url = await r2_storage_service.upload_file(file=file, folder=f"events/{organizer.id}")
+        url = await s3_storage_service.upload_file(file=file, folder=f"events/{organizer.id}")
         return {"url": url}
     except Exception as e:
         logger.error(f"Error uploading event image: {e}")

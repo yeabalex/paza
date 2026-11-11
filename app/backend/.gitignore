@@ -28,6 +28,8 @@ env/
 
 # Environment Variables
 .env
+.env.*
+.env.prod
 !.env.example
 
 # IDEs & Editors

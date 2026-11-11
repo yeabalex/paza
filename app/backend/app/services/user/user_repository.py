@@ -5,6 +5,7 @@ from typing import List, Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import deterministic_numeric_id
 from app.db.models import User, Interest, UserInterest, UserRole
 from app.schemas.user import UserProfileSchema, InterestSchema
 
@@ -28,6 +29,63 @@ class UserRepository:
         stmt = select(User).where(User.telegram_id == telegram_id)
         res = await db.execute(stmt)
         return res.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_clerk_id(db: AsyncSession, clerk_id: str) -> Optional[User]:
+        """Fetch user by Clerk ID."""
+        stmt = select(User).where(User.clerk_id == clerk_id)
+        res = await db.execute(stmt)
+        return res.scalar_one_or_none()
+
+    @staticmethod
+    async def get_or_create_by_clerk_id(
+        db: AsyncSession,
+        clerk_id: str,
+        email: Optional[str] = None,
+        full_name: Optional[str] = None,
+        username: Optional[str] = None,
+        preferred_language: str = "en",
+    ) -> User:
+        """Fetch or provision a PostgreSQL User from a verified Clerk identity."""
+        clean_email = email.lower().strip() if email else None
+        user = await UserRepository.get_by_clerk_id(db, clerk_id)
+
+        if not user and clean_email:
+            email_stmt = select(User).where(User.email == clean_email)
+            email_res = await db.execute(email_stmt)
+            user = email_res.scalar_one_or_none()
+            if user:
+                user.clerk_id = clerk_id
+
+        numeric_id = deterministic_numeric_id(clerk_id)
+
+        if not user:
+            user = User(
+                clerk_id=clerk_id,
+                telegram_id=numeric_id,
+                email=clean_email,
+                full_name=full_name,
+                username=username,
+                preferred_language=preferred_language,
+                role=UserRole.USER,
+            )
+            db.add(user)
+            logger.info(f"Provisioned new Clerk user [{clerk_id}] (numeric_id={numeric_id})")
+        else:
+            if not user.telegram_id:
+                user.telegram_id = numeric_id
+            if clean_email and user.email != clean_email:
+                user.email = clean_email
+            if full_name and user.full_name != full_name:
+                user.full_name = full_name
+            if username and user.username != username:
+                user.username = username
+            if preferred_language and user.preferred_language != preferred_language:
+                user.preferred_language = preferred_language
+
+        await db.commit()
+        await db.refresh(user)
+        return user
 
     @staticmethod
     async def get_or_create_user(
@@ -119,13 +177,8 @@ class UserRepository:
         return matching_interests
 
     @staticmethod
-    async def get_user_profile(db: AsyncSession, telegram_id: int) -> Optional[UserProfileSchema]:
-        """Build UserProfileSchema including selected interests."""
-        user = await UserRepository.get_by_telegram_id(db, telegram_id)
-        if not user:
-            return None
-
-        # Fetch selected interests
+    async def build_user_profile(db: AsyncSession, user: User) -> UserProfileSchema:
+        """Build UserProfileSchema for an existing User ORM instance."""
         ui_stmt = (
             select(Interest)
             .join(UserInterest, UserInterest.interest_id == Interest.id)
@@ -136,12 +189,22 @@ class UserRepository:
 
         return UserProfileSchema(
             id=user.id,
+            clerk_id=user.clerk_id,
             telegram_id=user.telegram_id,
+            email=user.email,
             full_name=user.full_name,
             username=user.username,
             phone_number=user.phone_number,
             preferred_language=user.preferred_language,
             role=user.role.value if hasattr(user.role, "value") else str(user.role),
             is_registered=True,
-            interests=[InterestSchema.model_validate(i) for i in selected_interests]
+            interests=[InterestSchema.model_validate(i) for i in selected_interests],
         )
+
+    @staticmethod
+    async def get_user_profile(db: AsyncSession, telegram_id: int) -> Optional[UserProfileSchema]:
+        """Build UserProfileSchema including selected interests."""
+        user = await UserRepository.get_by_telegram_id(db, telegram_id)
+        if not user:
+            return None
+        return await UserRepository.build_user_profile(db, user)

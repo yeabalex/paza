@@ -12,6 +12,8 @@ import {
 } from './api/events';
 
 import { BottomNav } from './components/common/BottomNav';
+import { AuthControls } from './components/auth/AuthControls';
+import { useAppAuth } from './auth/authContext';
 import { CategoryScroll } from './components/events/CategoryScroll';
 import { SearchBar } from './components/events/SearchBar';
 import { ExplorePostCard } from './components/events/ExplorePostCard';
@@ -48,6 +50,7 @@ const DEFAULT_INTERESTS: Interest[] = [
 ];
 
 export function App() {
+  const { isClerkEnabled, isLoaded: authLoaded, isSignedIn, user: clerkUser, openSignIn } = useAppAuth();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [availableInterests, setAvailableInterests] = useState<Interest[]>(DEFAULT_INTERESTS);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
@@ -71,6 +74,8 @@ export function App() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!authLoaded) return;
+
     const initApp = async () => {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -82,30 +87,26 @@ export function App() {
           setVerifyTicketParams({ eventId: verifyEventId, ticketCode: ticketCodeParam });
         }
 
-        // Initialize or resolve persistent web user ID
-        let storedUserId = localStorage.getItem('paza_user_id');
-        if (!storedUserId) {
-          storedUserId = String(Math.floor(100000000 + Math.random() * 900000000));
-          localStorage.setItem('paza_user_id', storedUserId);
+        const fetchedInterests = await fetchInterests().catch(() => [] as Interest[]);
+        if (fetchedInterests && fetchedInterests.length > 0) {
+          setAvailableInterests(fetchedInterests);
         }
-        const numericUserId = parseInt(storedUserId, 10);
-        const storedName = localStorage.getItem('paza_user_name') || 'Web User';
-        const storedUsername = localStorage.getItem('paza_username') || undefined;
 
-        const webUser: User = {
-          id: numericUserId,
-          first_name: storedName,
-          username: storedUsername,
-        };
-        setCurrentUser(webUser);
+        // Unauthenticated visitors browse the public Explore feed directly
+        if (!isSignedIn || !clerkUser) {
+          setUser(null);
+          setCurrentUser(null);
+          setViewState('feed');
+          return;
+        }
 
-        // Fast-path: Check local storage persistence synchronously for this user
-        const hasOnboardedLocally =
-          localStorage.getItem(`onboarding_completed_${storedUserId}`) === 'true';
+        const displayName = clerkUser.fullName || clerkUser.firstName || clerkUser.username || 'User';
+        const displayUsername = clerkUser.username || undefined;
+        const hasOnboardedLocally = localStorage.getItem(`onboarding_completed_${clerkUser.id}`) === 'true';
 
         let savedLocalSlugs: string[] = [];
         try {
-          const raw = localStorage.getItem(`selected_interests_${storedUserId}`);
+          const raw = localStorage.getItem(`selected_interests_${clerkUser.id}`);
           if (raw) savedLocalSlugs = JSON.parse(raw);
         } catch (e) {
           console.error('Error parsing local interests', e);
@@ -114,26 +115,19 @@ export function App() {
         if (savedLocalSlugs.length > 0) {
           setSelectedSlugs(savedLocalSlugs);
         }
-
-        // Returning users land INSTANTLY on feed while profile syncs in background
         if (hasOnboardedLocally || savedLocalSlugs.length > 0) {
           setViewState('feed');
-        } else {
-          setViewState('loading');
         }
 
-        // Load Interests & Profile concurrently in parallel in background
-        const [fetchedInterests, profile] = await Promise.all([
-          fetchInterests().catch(() => [] as Interest[]),
-          fetchUserProfile(storedUserId, storedUsername, storedName).catch(() => null),
-        ]);
-
-        if (fetchedInterests && fetchedInterests.length > 0) {
-          setAvailableInterests(fetchedInterests);
-        }
-
+        const profile = await fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null);
         if (profile) {
           setUser(profile);
+          setCurrentUser({
+            id: profile.telegram_id ?? 0,
+            first_name: profile.full_name || displayName,
+            username: profile.username || displayUsername,
+            photo_url: clerkUser.imageUrl || undefined,
+          });
           const dbSlugs = profile.interests ? profile.interests.map((i) => i.slug) : [];
           const effectiveSlugs = dbSlugs.length > 0 ? dbSlugs : savedLocalSlugs;
           if (effectiveSlugs.length > 0) {
@@ -146,11 +140,8 @@ export function App() {
             setViewState('onboarding');
           }
         } else {
-          if (!hasOnboardedLocally && savedLocalSlugs.length === 0) {
-            setViewState('onboarding');
-          } else {
-            setViewState('feed');
-          }
+          setUser(null);
+          setViewState('feed');
         }
       } catch (err) {
         console.error('Error initializing app:', err);
@@ -159,7 +150,7 @@ export function App() {
     };
 
     initApp();
-  }, []);
+  }, [authLoaded, isSignedIn, clerkUser]);
 
   // Load first page when feed/category/activeTab changes
   useEffect(() => {
@@ -167,7 +158,6 @@ export function App() {
       setIsLoadingEvents(true);
       setHasMore(true);
       setSelectedEvent(null);
-      const userId = user?.telegram_id || (currentUser ? currentUser.id : 999888777);
 
       // Fetch dynamic categories
       fetchCategories().then((cats) => {
@@ -177,11 +167,23 @@ export function App() {
       });
 
       if (activeTab === 'saved') {
-        const savedEvts = await fetchSavedScrapedEvents(userId);
+        if (!isSignedIn || !user?.telegram_id) {
+          setEvents([]);
+          setHasMore(false);
+          setIsLoadingEvents(false);
+          return;
+        }
+        const savedEvts = await fetchSavedScrapedEvents(user.telegram_id);
         setEvents(savedEvts);
         setHasMore(false);
       } else if (activeTab === 'tickets') {
-        const rsvpEvts = await fetchUserRsvps(userId);
+        if (!isSignedIn || !user?.telegram_id) {
+          setEvents([]);
+          setHasMore(false);
+          setIsLoadingEvents(false);
+          return;
+        }
+        const rsvpEvts = await fetchUserRsvps(user.telegram_id);
         setEvents(rsvpEvts);
         setHasMore(false);
       } else {
@@ -195,7 +197,7 @@ export function App() {
     if (viewState === 'feed') {
       loadFirstPage();
     }
-  }, [activeCategory, activeTab, timeframe, viewState, user, currentUser]);
+  }, [activeCategory, activeTab, timeframe, viewState, isSignedIn, user]);
 
   const loadNextPage = async () => {
     if (isLoadingMore || !hasMore || activeTab !== 'home') return;
@@ -249,18 +251,25 @@ export function App() {
   };
 
   const handleSaveInterests = async () => {
-    const userId = user?.telegram_id || (currentUser ? currentUser.id : 999888777);
-    await updateUserInterests(userId, selectedSlugs);
+    if (!isSignedIn || !clerkUser || !user?.telegram_id) {
+      if (isClerkEnabled) openSignIn();
+      return;
+    }
+    await updateUserInterests(user.telegram_id, selectedSlugs);
 
-    localStorage.setItem(`onboarding_completed_${userId}`, 'true');
-    localStorage.setItem(`selected_interests_${userId}`, JSON.stringify(selectedSlugs));
+    localStorage.setItem(`onboarding_completed_${clerkUser.id}`, 'true');
+    localStorage.setItem(`selected_interests_${clerkUser.id}`, JSON.stringify(selectedSlugs));
 
     setViewState('feed');
   };
 
   const toggleJoin = (eventId: string) => {
+    if (!isSignedIn || !user?.telegram_id) {
+      if (isClerkEnabled) openSignIn();
+      return;
+    }
     const targetEvent = events.find((e) => e.id === eventId);
-    const userId = user?.telegram_id || (currentUser ? currentUser.id : 999888777);
+    const userId = user.telegram_id;
 
     setJoinedEvents((prev) => {
       const isJoined = !prev[eventId];
@@ -366,54 +375,63 @@ export function App() {
       {activeTab === 'tickets' ? (
         <div style={{ padding: '16px 20px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Your RSVPs</h1>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} joined</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} joined</span>
+            <AuthControls />
+          </div>
         </div>
       ) : activeTab === 'saved' ? (
         <div style={{ padding: '16px 20px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Saved Events</h1>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} saved</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} saved</span>
+            <AuthControls />
+          </div>
         </div>
       ) : (
         <>
-          <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', margin: 0 }}>
               {timeframe === 'past' ? 'Past Events' : 'Explore Events'}
             </h1>
-            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '3px', gap: '2px' }}>
-              <button
-                type="button"
-                onClick={() => setTimeframe('upcoming')}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: '16px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: timeframe === 'upcoming' ? 'var(--accent)' : 'transparent',
-                  color: timeframe === 'upcoming' ? '#fff' : 'var(--text-muted)',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                Upcoming
-              </button>
-              <button
-                type="button"
-                onClick={() => setTimeframe('past')}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: '16px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: timeframe === 'past' ? 'var(--accent)' : 'transparent',
-                  color: timeframe === 'past' ? '#fff' : 'var(--text-muted)',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                Past
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '3px', gap: '2px' }}>
+                <button
+                  type="button"
+                  onClick={() => setTimeframe('upcoming')}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '16px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: timeframe === 'upcoming' ? 'var(--accent)' : 'transparent',
+                    color: timeframe === 'upcoming' ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Upcoming
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimeframe('past')}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '16px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: timeframe === 'past' ? 'var(--accent)' : 'transparent',
+                    color: timeframe === 'past' ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Past
+                </button>
+              </div>
+              <AuthControls />
             </div>
           </div>
 
@@ -453,14 +471,34 @@ export function App() {
           activeTab === 'tickets' ? (
             <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
               <Ticket size={40} style={{ margin: '0 auto 12px', opacity: 0.4, color: 'var(--accent)' }} />
-              <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>No RSVP'd events yet</p>
-              <p style={{ fontSize: '13px' }}>Tap "Going" on any event to register your RSVP here.</p>
+              {isClerkEnabled && !isSignedIn ? (
+                <>
+                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>Sign in to view your RSVPs</p>
+                  <p style={{ fontSize: '13px', marginBottom: '14px' }}>Your event tickets and RSVPs are synced to your account.</p>
+                  <button type="button" onClick={openSignIn} style={{ padding: '8px 18px', borderRadius: '20px', border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>Sign In</button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>No RSVP'd events yet</p>
+                  <p style={{ fontSize: '13px' }}>Tap "Going" on any event to register your RSVP here.</p>
+                </>
+              )}
             </div>
           ) : activeTab === 'saved' ? (
             <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
               <Bookmark size={40} style={{ margin: '0 auto 12px', opacity: 0.4, color: 'var(--accent)' }} />
-              <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>No saved events yet</p>
-              <p style={{ fontSize: '13px' }}>Tap the bookmark icon on any event to save it here.</p>
+              {isClerkEnabled && !isSignedIn ? (
+                <>
+                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>Sign in to view saved events</p>
+                  <p style={{ fontSize: '13px', marginBottom: '14px' }}>Bookmark events and access them across devices.</p>
+                  <button type="button" onClick={openSignIn} style={{ padding: '8px 18px', borderRadius: '20px', border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>Sign In</button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>No saved events yet</p>
+                  <p style={{ fontSize: '13px' }}>Tap the bookmark icon on any event to save it here.</p>
+                </>
+              )}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-muted)' }}>
