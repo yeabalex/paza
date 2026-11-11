@@ -18,28 +18,42 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup tasks: create tables if not existing
+    # Startup tasks: verify schema with a single fast query; create/migrate only when missing
     try:
+        from sqlalchemy import text
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-            from sqlalchemy import text
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id VARCHAR(255);"))
-            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_clerk_id ON users (clerk_id);"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255);"))
-            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);"))
-            await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS support_phone VARCHAR(50);"))
-            await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS social_links JSONB;"))
-            await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS username VARCHAR(100);"))
-            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_organizers_username ON organizers (username);"))
-            await conn.execute(text("ALTER TABLE events ADD COLUMN IF NOT EXISTS short_description VARCHAR(500);"))
-            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);"))
-            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255);"))
-            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS screenshot_url TEXT;"))
-            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);"))
-            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS ticket_code VARCHAR(100);"))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_rsvps_ticket_code ON event_rsvps (ticket_code);"))
-            await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';"))
+            col_count = await conn.scalar(text("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND (
+                    (table_name = 'users' AND column_name IN ('clerk_id', 'email', 'hashed_password', 'google_id'))
+                    OR (table_name = 'organizers' AND column_name IN ('support_phone', 'social_links', 'username'))
+                    OR (table_name = 'events' AND column_name = 'short_description')
+                    OR (table_name = 'event_rsvps' AND column_name IN ('full_name', 'transaction_id', 'screenshot_url', 'payment_method', 'ticket_code', 'status'))
+                    OR (table_name = 'interests' AND column_name = 'slug')
+                    OR (table_name = 'scraper_targets' AND column_name = 'last_watermark')
+                    OR (table_name = 'saved_scraped_events' AND column_name = 'event_data')
+                  )
+            """))
+            if (col_count or 0) < 17:
+                await conn.run_sync(Base.metadata.create_all)
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id VARCHAR(255);"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_clerk_id ON users (clerk_id);"))
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);"))
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255);"))
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);"))
+                await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS support_phone VARCHAR(50);"))
+                await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS social_links JSONB;"))
+                await conn.execute(text("ALTER TABLE organizers ADD COLUMN IF NOT EXISTS username VARCHAR(100);"))
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_organizers_username ON organizers (username);"))
+                await conn.execute(text("ALTER TABLE events ADD COLUMN IF NOT EXISTS short_description VARCHAR(500);"))
+                await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);"))
+                await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255);"))
+                await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS screenshot_url TEXT;"))
+                await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);"))
+                await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS ticket_code VARCHAR(100);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_rsvps_ticket_code ON event_rsvps (ticket_code);"))
+                await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';"))
         logger.info("Database tables initialized successfully.")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")

@@ -46,10 +46,11 @@ class UserRepository:
         full_name: Optional[str] = None,
         username: Optional[str] = None,
         preferred_language: str = "en",
+        prefetched_user: Optional[User] = None,
     ) -> User:
         """Fetch or provision a PostgreSQL User from a verified Clerk identity."""
         clean_email = email.lower().strip() if email else None
-        user = await UserRepository.get_by_clerk_id(db, clerk_id)
+        user = prefetched_user or await UserRepository.get_by_clerk_id(db, clerk_id)
 
         numeric_id = deterministic_numeric_id(clerk_id)
 

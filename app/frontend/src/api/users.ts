@@ -18,7 +18,7 @@ export async function fetchUserProfile(
   if (fullName) {
     url += `&full_name=${encodeURIComponent(fullName)}`;
   }
-  return await apiFetch<UserProfile>(url);
+  return await apiFetch<UserProfile>(url, {}, 1);
 }
 
 export async function updateUserInterests(userId: number | string, interestSlugs: string[]): Promise<boolean> {

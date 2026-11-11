@@ -108,16 +108,17 @@ export function App() {
           setSelectedSlugs(savedLocalSlugs);
         }
 
-        const [fetchedInterests, profile] = await Promise.all([
-          fetchInterests().catch(() => [] as Interest[]),
-          fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null),
-        ]);
+        fetchInterests()
+          .then((fetchedInterests) => {
+            if (!cancelled && fetchedInterests && fetchedInterests.length > 0) {
+              setAvailableInterests(fetchedInterests);
+            }
+          })
+          .catch(() => {});
+
+        const profile = await fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null);
 
         if (cancelled) return;
-
-        if (fetchedInterests && fetchedInterests.length > 0) {
-          setAvailableInterests(fetchedInterests);
-        }
 
         if (profile) {
           setUser(profile);

@@ -36,6 +36,12 @@ async def _resolve_or_provision_web_user(
         resolved_name = current_user.get("full_name") or full_name
         resolved_username = current_user.get("username") or username
 
+        existing_user = await UserRepository.get_by_clerk_id(db, clerk_id)
+        if existing_user:
+            email = email or existing_user.email
+            resolved_name = resolved_name or existing_user.full_name
+            resolved_username = resolved_username or existing_user.username
+
         if not email or not resolved_name:
             clerk_profile = await clerk_verifier.fetch_user_profile(clerk_id)
             if clerk_profile:
@@ -50,6 +56,7 @@ async def _resolve_or_provision_web_user(
             full_name=resolved_name or "Web User",
             username=resolved_username,
             preferred_language="en",
+            prefetched_user=existing_user,
         )
 
     target_id = int(current_user["user_id"])
