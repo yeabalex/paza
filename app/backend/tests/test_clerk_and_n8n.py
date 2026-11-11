@@ -426,6 +426,101 @@ class TestTelegramNotifier(unittest.IsolatedAsyncioTestCase):
 
         job_store._jobs.pop("job_tg_fallback", None)
 
+    async def test_failure_logs_forwarded_to_telegram_and_n8n_error_preserved(self):
+        err_html = format_pipeline_telegram_message(
+            job_id="job_warn",
+            status="success",
+            summary={
+                "duration_seconds": 5.1,
+                "targets_processed": 2,
+                "total_posts_scraped": 4,
+                "events_extracted": 1,
+                "failed_transcriptions": 1,
+                "failed_extractions": 1,
+                "error_logs": ["LLM @addis: ReadTimeout", "n8n callback failed (HTTP 404)"],
+            },
+        )
+        self.assertIn("Completed (With Errors)", err_html)
+        self.assertIn("Failure Logs:", err_html)
+        self.assertIn("LLM @addis: ReadTimeout", err_html)
+        self.assertIn("n8n callback failed (HTTP 404)", err_html)
+
+        with (
+            patch.object(settings, "PIPELINE_API_KEY", "inbound-secret-123"),
+            patch.object(settings, "N8N_WEBHOOK_URL", "https://n8n.example.com/webhook/paza"),
+            patch.object(settings, "N8N_API_KEY", "outbound-secret-456"),
+            patch(
+                "app.api.v1.endpoints.scraper.run_pipeline_gateway",
+                new=AsyncMock(side_effect=RuntimeError("All 3 LLM extractions failed")),
+            ),
+            patch("app.api.v1.endpoints.scraper.n8n_client.notify_pipeline_result", new=AsyncMock(return_value=False)),
+            patch("app.api.v1.endpoints.scraper.n8n_client.last_error", "HTTP 404: webhook inactive"),
+            patch(
+                "app.api.v1.endpoints.scraper.telegram_notifier.notify_pipeline_result",
+                new=AsyncMock(return_value=True),
+            ) as mock_tg_fail,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                res = await client.post(
+                    "/api/v1/scraper/trigger?async_mode=true",
+                    headers={"X-Api-Key": "inbound-secret-123"},
+                    json={"trigger_source": "manual", "notify_n8n": True, "job_id": "job_fail_logs"},
+                )
+                self.assertEqual(res.status_code, 202)
+
+                st = await client.get(
+                    "/api/v1/scraper/jobs/job_fail_logs",
+                    headers={"X-Api-Key": "inbound-secret-123"},
+                )
+                self.assertEqual(st.status_code, 200)
+                self.assertEqual(st.json()["status"], "failed")
+                self.assertTrue(st.json()["telegram_notified"])
+
+        mock_tg_fail.assert_awaited_once()
+        fail_kwargs = mock_tg_fail.call_args.kwargs
+        self.assertEqual(fail_kwargs["status"], "failed")
+        self.assertIn("All 3 LLM extractions failed", fail_kwargs["error"])
+        self.assertIn("n8n callback failed (HTTP 404: webhook inactive)", fail_kwargs["summary"]["error_logs"])
+        job_store._jobs.pop("job_fail_logs", None)
+
+    async def test_gemini_fallback_and_router_no_fake_events(self):
+        import httpx as real_httpx
+        from app.services.llm.gemini import GeminiLLMProvider
+        from app.services.llm.router import LLMRouter
+
+        ok_resp = AsyncMock()
+        ok_resp.status_code = 200
+        ok_resp.json = lambda: {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": '```json\n{"is_event": true, "events": [{"is_event": true, "title": "Jazz Night", "confidence_score": 0.9}]}\n```'
+                    }]
+                }
+            }]
+        }
+
+        mock_http = AsyncMock()
+        mock_http.__aenter__.return_value = mock_http
+        mock_http.post = AsyncMock(side_effect=[real_httpx.ReadTimeout(""), ok_resp])
+
+        with patch("app.services.llm.gemini.httpx.AsyncClient", return_value=mock_http):
+            provider = GeminiLLMProvider(api_key="test-key")
+            events = await provider.extract_events("Jazz Night Friday 8pm at Hyatt")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].title, "Jazz Night")
+
+        failing_provider = AsyncMock()
+        failing_provider.name = "Gemini"
+        failing_provider.api_key = "test-key"
+        failing_provider.extract_events = AsyncMock(side_effect=real_httpx.ReadTimeout(""))
+        router = LLMRouter(providers=[failing_provider])
+
+        with self.assertRaises(RuntimeError) as ctx:
+            await router.extract_events_alternating("Sample post", allow_heuristic_fallback=False)
+        self.assertIn("ReadTimeout", str(ctx.exception))
+
 
 class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
     """Ensure all protected user, event, organizer, and server endpoints fail closed."""

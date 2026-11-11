@@ -24,36 +24,45 @@ class GeminiLLMProvider(BaseLLMProvider):
         if not self.api_key:
             raise ValueError("No GEMINI_API_KEY provided.")
 
-        models_to_try = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.5-flash"]
+        models_to_try = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
         last_error = None
         headers = {"x-goog-api-key": self.api_key}
-        for model_id in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": f"{get_extraction_prompt()}\n\nRaw Post Text:\n{text}"}
-                        ]
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for model_id in models_to_try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": f"{get_extraction_prompt()}\n\nRaw Post Text:\n{text}"}
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "response_mime_type": "application/json"
                     }
-                ],
-                "generationConfig": {
-                    "response_mime_type": "application/json"
                 }
-            }
 
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                if response.status_code == 200:
-                    res_json = response.json()
-                    candidate_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    parsed = json.loads(candidate_text)
-                    return parse_llm_json_events(parsed)
-                elif response.status_code == 429:
-                    logger.info(f"Gemini LLM model [{model_id}] hit 429 rate limit. Trying next model endpoint...")
-                    last_error = f"Gemini API HTTP Error 429: {response.text}"
-                else:
-                    last_error = f"Gemini API HTTP Error {response.status_code}: {response.text}"
+                try:
+                    response = await client.post(url, headers=headers, json=payload)
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        candidate_text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        if candidate_text.startswith("```"):
+                            candidate_text = candidate_text.split("\n", 1)[1] if "\n" in candidate_text else candidate_text[3:]
+                            if candidate_text.endswith("```"):
+                                candidate_text = candidate_text[:-3].strip()
+                        parsed = json.loads(candidate_text)
+                        return parse_llm_json_events(parsed)
+                    if response.status_code == 429:
+                        logger.info(f"Gemini LLM model [{model_id}] hit 429 rate limit. Trying next model endpoint...")
+                    else:
+                        logger.warning(f"Gemini LLM model [{model_id}] HTTP {response.status_code}: {response.text[:200]}")
+                    last_error = f"Gemini [{model_id}] HTTP {response.status_code}: {response.text[:180]}"
+                except Exception as exc:
+                    err_detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                    logger.warning(f"Gemini LLM model [{model_id}] failed ({err_detail}). Trying next model...")
+                    last_error = f"Gemini [{model_id}] {err_detail}"
 
         raise RuntimeError(last_error or "Gemini API request failed across all model endpoints.")
 

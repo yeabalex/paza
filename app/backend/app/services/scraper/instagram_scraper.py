@@ -1,6 +1,7 @@
 """Instagram Scraper Module — powered by Instaloader with anti-block protections."""
 
 import abc
+import asyncio
 import logging
 import os
 import re
@@ -187,30 +188,35 @@ class RealInstagramScraper(BaseInstagramScraper):
                     except Exception:
                         pass
 
-                if not is_hashtag:
-                    profile = instaloader.Profile.from_username(L.context, target)
-                    count = 0
-                    for post in profile.get_posts():
-                        shortcode = post.shortcode
-                        caption = self._clean_caption(post.caption or "")
-                        post_date = post.date_utc.replace(tzinfo=timezone.utc)
-                        is_vid = getattr(post, "is_video", False)
-                        raw_posts.append((shortcode, caption, post_date, is_vid))
-                        count += 1
-                        if count >= limit:
-                            break
-                else:
-                    hashtag = instaloader.Hashtag.from_name(L.context, target)
-                    count = 0
-                    for post in hashtag.get_posts():
-                        shortcode = post.shortcode
-                        caption = self._clean_caption(post.caption or "")
-                        post_date = post.date_utc.replace(tzinfo=timezone.utc)
-                        is_vid = getattr(post, "is_video", False)
-                        raw_posts.append((shortcode, caption, post_date, is_vid))
-                        count += 1
-                        if count >= limit:
-                            break
+                def _fetch_sync():
+                    posts_buf = []
+                    if not is_hashtag:
+                        profile = instaloader.Profile.from_username(L.context, target)
+                        count = 0
+                        for post in profile.get_posts():
+                            shortcode = post.shortcode
+                            caption = self._clean_caption(post.caption or "")
+                            post_date = post.date_utc.replace(tzinfo=timezone.utc)
+                            is_vid = getattr(post, "is_video", False)
+                            posts_buf.append((shortcode, caption, post_date, is_vid))
+                            count += 1
+                            if count >= limit:
+                                break
+                    else:
+                        hashtag = instaloader.Hashtag.from_name(L.context, target)
+                        count = 0
+                        for post in hashtag.get_posts():
+                            shortcode = post.shortcode
+                            caption = self._clean_caption(post.caption or "")
+                            post_date = post.date_utc.replace(tzinfo=timezone.utc)
+                            is_vid = getattr(post, "is_video", False)
+                            posts_buf.append((shortcode, caption, post_date, is_vid))
+                            count += 1
+                            if count >= limit:
+                                break
+                    return posts_buf
+
+                raw_posts.extend(await asyncio.to_thread(_fetch_sync))
             except instaloader.exceptions.ConnectionException as e:
                 logger.warning(f"[AntiBlock] Instaloader rate-limit for @{target}: {e}")
             except Exception as e:

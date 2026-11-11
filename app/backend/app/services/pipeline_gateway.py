@@ -82,6 +82,8 @@ async def run_pipeline_gateway(
         PipelineLogger.log_pipeline_failure("Stage 2: Multi-Platform Scraping Producer Cycle", scrap_err, time.time() - start_time)
         raise RuntimeError(f"Pipeline Gateway scraping producer cycle failed: {scrap_err}") from scrap_err
 
+    error_logs: List[str] = list(getattr(producer, "last_errors", []) or [])
+
     # Stage 3: Sync watermarks back to DB
     PipelineLogger.log_stage(3, "PostgreSQL Watermark Synchronization")
     try:
@@ -94,52 +96,77 @@ async def run_pipeline_gateway(
     staged_task_ids = list(queue_manager._in_memory_staging.keys())
     PipelineLogger.log_stage(4, "Post Processing & LLM Extraction", f"Processing {len(staged_task_ids)} staged posts")
 
-    transcriber = WhisperTranscriber()
     classifier = EventClassifier.get_instance()
+    classifier._lazy_init_model()
     llm_router = LLMRouter()
+    if staged_task_ids:
+        await redis_storage.get_client()
 
-    scraped_posts: List[Dict[str, Any]] = []
-    extracted_titles: List[str] = []
-    events_extracted_count = 0
-    passed_events_skipped_count = 0
-    non_events_count = 0
-    failed_transcriptions_count = 0
-    failed_extractions_count = 0
+    concurrency_sem = asyncio.Semaphore(4)
 
-    for task_id in staged_task_ids:
-        staged = await queue_manager.get_staged_message(task_id)
-        if not staged:
-            continue
+    async def _process_staged_task(task_id: str) -> Dict[str, Any]:
+        async with concurrency_sem:
+            staged = await queue_manager.get_staged_message(task_id)
+            if not staged:
+                return {}
 
-        raw_caption = staged.get("raw_text") or ""
-        post_url = staged.get("post_url") or ""
-        platform = staged.get("platform")
+            post_errors: List[str] = []
+            post_titles: List[str] = []
+            local_events_extracted = 0
+            local_passed_skipped = 0
+            local_non_events = 0
+            local_failed_transcriptions = 0
+            local_failed_extractions = 0
+            local_llm_attempted = 0
+            local_llm_succeeded = 0
 
-        # Transcribe audio for video posts if needed
-        if platform in ("tiktok", "instagram") and post_url:
-            try:
-                raw_caption = await transcriber.transcribe_post_video_if_needed(
-                    post_url=post_url,
-                    current_caption=raw_caption,
-                    min_caption_len=800
-                )
-            except Exception as t_err:
-                failed_transcriptions_count += 1
+            raw_caption = staged.get("raw_text") or ""
+            post_url = staged.get("post_url") or ""
+            platform = staged.get("platform")
+            source_handle = staged.get("channel_username") or "unknown"
 
-        # Local Classifier
-        is_event, confidence, meta = classifier.classify(raw_caption)
-        extracted_event_data = None
-        extracted_by_provider = None
+            # Transcribe audio for video posts if needed
+            if platform in ("tiktok", "instagram") and post_url:
+                transcriber = WhisperTranscriber()
+                try:
+                    raw_caption = await transcriber.transcribe_post_video_if_needed(
+                        post_url=post_url,
+                        current_caption=raw_caption,
+                        min_caption_len=800
+                    )
+                    if transcriber.last_error:
+                        local_failed_transcriptions += 1
+                        post_errors.append(f"Transcribe @{source_handle}: {transcriber.last_error}")
+                except Exception as t_err:
+                    local_failed_transcriptions += 1
+                    err_detail = f"{type(t_err).__name__}: {t_err}" if str(t_err) else type(t_err).__name__
+                    post_errors.append(f"Transcribe @{source_handle}: {err_detail}")
 
-        if is_event:
-            llm_context = f"[Platform: {platform} | Source: @{staged.get('channel_username')}]\n\n{raw_caption}"
-            try:
-                events_res_list, provider_name = await llm_router.extract_events_alternating(llm_context)
-                await asyncio.sleep(2.0)  # Rate-limit pacing
-                extracted_by_provider = provider_name
+            # Local Classifier
+            is_event, confidence, _meta = classifier.classify(raw_caption)
+            extracted_event_data = None
+            extracted_by_provider = None
+
+            if is_event:
+                local_llm_attempted += 1
+                llm_context = f"[Platform: {platform} | Source: @{source_handle}]\n\n{raw_caption}"
+                events_res_list = []
+                provider_name = None
+                try:
+                    events_res_list, provider_name = await llm_router.extract_events_alternating(
+                        llm_context,
+                        allow_heuristic_fallback=False,
+                    )
+                    local_llm_succeeded += 1
+                    extracted_by_provider = provider_name
+                except Exception as llm_err:
+                    local_failed_extractions += 1
+                    err_detail = f"{type(llm_err).__name__}: {llm_err}" if str(llm_err) else type(llm_err).__name__
+                    post_errors.append(f"LLM @{source_handle}: {err_detail}")
 
                 if events_res_list:
                     base_post_id = str(staged.get("message_id") or task_id)
+                    saved_any_event = False
                     for sub_idx, event_res in enumerate(events_res_list, start=1):
                         if not event_res or not event_res.is_event:
                             continue
@@ -150,12 +177,13 @@ async def run_pipeline_gateway(
                                 f"Skipping passed event candidate: '{event_res.title}' "
                                 f"({event_res.start_datetime} to {event_res.end_datetime}) - not adding to Redis."
                             )
-                            passed_events_skipped_count += 1
+                            local_passed_skipped += 1
                             continue
 
-                        events_extracted_count += 1
+                        local_events_extracted += 1
+                        saved_any_event = True
                         if event_res.title:
-                            extracted_titles.append(event_res.title)
+                            post_titles.append(event_res.title)
                         extracted_event_data = {
                             "title": event_res.title,
                             "description": event_res.description,
@@ -177,7 +205,7 @@ async def run_pipeline_gateway(
                                 event_dict=extracted_event_data,
                                 raw_metadata={
                                     "task_id": task_id,
-                                    "handle_or_channel": staged.get("channel_username"),
+                                    "handle_or_channel": source_handle,
                                     "post_url": post_url,
                                     "extracted_by": provider_name,
                                     "classifier_score": confidence
@@ -186,26 +214,63 @@ async def run_pipeline_gateway(
                         except Exception as redis_save_err:
                             PipelineLogger.log_pipeline_failure("Stage 6: Redis Cache Storage", redis_save_err, time.time() - start_time)
                             raise redis_save_err
-                else:
-                    non_events_count += 1
-            except Exception as llm_err:
-                failed_extractions_count += 1
-        else:
-            non_events_count += 1
+                    if not saved_any_event:
+                        local_non_events += 1
+                elif local_llm_succeeded > 0:
+                    local_non_events += 1
+            else:
+                local_non_events += 1
 
-        scraped_posts.append({
-            "task_id": task_id,
-            "platform": platform,
-            "handle_or_channel": staged.get("channel_username"),
-            "post_id": staged.get("message_id"),
-            "post_url": post_url,
-            "scraped_date": staged.get("scraped_date"),
-            "is_event_candidate": is_event,
-            "classifier_score": confidence,
-            "extracted_by": extracted_by_provider,
-            "extracted_event": extracted_event_data,
-            "raw_caption": raw_caption
-        })
+            return {
+                "post": {
+                    "task_id": task_id,
+                    "platform": platform,
+                    "handle_or_channel": source_handle,
+                    "post_id": staged.get("message_id"),
+                    "post_url": post_url,
+                    "scraped_date": staged.get("scraped_date"),
+                    "is_event_candidate": is_event,
+                    "classifier_score": confidence,
+                    "extracted_by": extracted_by_provider,
+                    "extracted_event": extracted_event_data,
+                    "raw_caption": raw_caption
+                },
+                "titles": post_titles,
+                "errors": post_errors,
+                "events_extracted": local_events_extracted,
+                "passed_skipped": local_passed_skipped,
+                "non_events": local_non_events,
+                "failed_transcriptions": local_failed_transcriptions,
+                "failed_extractions": local_failed_extractions,
+                "llm_attempted": local_llm_attempted,
+                "llm_succeeded": local_llm_succeeded,
+            }
+
+    post_results = await asyncio.gather(*(_process_staged_task(tid) for tid in staged_task_ids))
+
+    scraped_posts: List[Dict[str, Any]] = []
+    extracted_titles: List[str] = []
+    events_extracted_count = 0
+    passed_events_skipped_count = 0
+    non_events_count = 0
+    failed_transcriptions_count = 0
+    failed_extractions_count = 0
+    llm_attempted_count = 0
+    llm_succeeded_count = 0
+
+    for res in post_results:
+        if not res:
+            continue
+        scraped_posts.append(res["post"])
+        extracted_titles.extend(res["titles"])
+        error_logs.extend(res["errors"])
+        events_extracted_count += res["events_extracted"]
+        passed_events_skipped_count += res["passed_skipped"]
+        non_events_count += res["non_events"]
+        failed_transcriptions_count += res["failed_transcriptions"]
+        failed_extractions_count += res["failed_extractions"]
+        llm_attempted_count += res["llm_attempted"]
+        llm_succeeded_count += res["llm_succeeded"]
 
     # Redis cache hygiene: Clean up any passed events from Redis store
     cleaned_events_count = 0
@@ -214,9 +279,20 @@ async def run_pipeline_gateway(
         cleaned_events_count = cleanup_res.get("cleaned_count", 0)
         logger.info(f"Pipeline Redis hygiene cleanup: {cleaned_events_count} passed events removed.")
     except Exception as clean_err:
-        logger.warning(f"Pipeline Redis hygiene cleanup warning: {clean_err}")
+        err_detail = f"{type(clean_err).__name__}: {clean_err}" if str(clean_err) else type(clean_err).__name__
+        logger.warning(f"Pipeline Redis hygiene cleanup warning: {err_detail}")
+        error_logs.append(f"Redis cleanup: {err_detail}")
 
     await redis_storage.close()
+
+    deduped_error_logs = list(dict.fromkeys(error_logs))[:15]
+    if llm_attempted_count > 0 and llm_succeeded_count == 0 and failed_extractions_count == llm_attempted_count:
+        fail_err = RuntimeError(
+            f"All {failed_extractions_count} LLM extractions failed: "
+            + ("; ".join(deduped_error_logs[:3]) or "Unknown LLM error")
+        )
+        PipelineLogger.log_pipeline_failure("Stage 4: LLM Extraction", fail_err, time.time() - start_time)
+        raise fail_err
 
     # Stage 6: Write audit output file
     PipelineLogger.log_stage(6, "Audit Report Export", f"Writing JSON output to '{output_file}'")
@@ -241,6 +317,7 @@ async def run_pipeline_gateway(
     summary["passed_events_skipped"] = passed_events_skipped_count
     summary["passed_events_cleaned"] = cleaned_events_count
     summary["extracted_titles"] = extracted_titles
+    summary["error_logs"] = deduped_error_logs
 
     # Purge temporary export file
     import os

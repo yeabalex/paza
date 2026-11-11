@@ -34,7 +34,11 @@ class LLMRouter:
         self._current_index += 1
         return provider
 
-    async def extract_events_alternating(self, text: str) -> Tuple[List[EventExtractionResult], str]:
+    async def extract_events_alternating(
+        self,
+        text: str,
+        allow_heuristic_fallback: bool = True,
+    ) -> Tuple[List[EventExtractionResult], str]:
         """Extract all event details from post text using alternating LLM providers.
         
         Returns tuple of (List[EventExtractionResult], provider_name).
@@ -42,6 +46,7 @@ class LLMRouter:
         active_providers = self._get_active_providers()
         attempts = 0
         total_attempts = len(active_providers)
+        errors: List[str] = []
 
         while attempts < total_attempts:
             provider = self._get_next_provider()
@@ -50,10 +55,15 @@ class LLMRouter:
                 results = await provider.extract_events(text)
                 return results, provider.name
             except Exception as e:
-                logger.warning(f"Provider [{provider.name}] skipped/failed ({e}). Moving to next API key...")
+                err_detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                logger.warning(f"Provider [{provider.name}] skipped/failed ({err_detail}). Moving to next API key...")
+                errors.append(f"{provider.name}: {err_detail}")
                 attempts += 1
 
-        # Ultimate fallback only if NO API keys work
+        if not allow_heuristic_fallback:
+            raise RuntimeError(f"All LLM providers failed: {'; '.join(errors)}")
+
+        # Ultimate fallback only when heuristic fallback is explicitly allowed
         logger.error("All configured LLM provider API keys failed. Using fallback parser.")
         fallback = GeminiLLMProvider()._heuristic_fallback(text)
         return ([fallback] if fallback.is_event else []), "Fallback"

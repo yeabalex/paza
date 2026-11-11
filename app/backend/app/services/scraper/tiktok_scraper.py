@@ -1,6 +1,7 @@
 """TikTok Scraper Module — powered by yt-dlp with anti-block protections."""
 
 import abc
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -93,23 +94,28 @@ class RealTikTokScraper(BaseTikTokScraper):
                 "no_warnings": True,
                 "logger": YtDlpQuietLogger(),
                 "playlistend": limit,
+                "socket_timeout": 15,
                 # Anti-block: random UA + sleep between requests
                 "http_headers": http_headers,
                 "sleep_interval_requests": 2,
                 "max_sleep_interval": 5,
             }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if info and "entries" in info:
-                    for entry in info["entries"]:
-                        if not entry:
-                            continue
-                        v_id = str(entry.get("id") or "")
-                        v_title = self._clean_caption(
-                            entry.get("title") or entry.get("description") or ""
-                        )
-                        if v_id and len(v_title) > 5:
-                            raw_videos.append((v_id, v_title))
+
+            def _extract_flat():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+
+            info = await asyncio.to_thread(_extract_flat)
+            if info and "entries" in info:
+                for entry in info["entries"]:
+                    if not entry:
+                        continue
+                    v_id = str(entry.get("id") or "")
+                    v_title = self._clean_caption(
+                        entry.get("title") or entry.get("description") or ""
+                    )
+                    if v_id and len(v_title) > 5:
+                        raw_videos.append((v_id, v_title))
         except Exception as e:
             logger.warning(f"yt-dlp extraction for {'#' if is_hashtag else '@'}{target}: {e}")
 

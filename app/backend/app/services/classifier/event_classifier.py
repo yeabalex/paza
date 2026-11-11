@@ -36,6 +36,7 @@ class EventClassifier:
         self.threshold = threshold
         self.model_name = model_name
         self._model = None
+        self._model_load_attempted = False
         self._pos_embeddings = None
         self._neg_embeddings = None
 
@@ -47,8 +48,9 @@ class EventClassifier:
 
     def _lazy_init_model(self):
         """Lazy load the sentence transformer model once into memory."""
-        if self._model is not None:
+        if self._model is not None or self._model_load_attempted:
             return
+        self._model_load_attempted = True
 
         try:
             from sentence_transformers import SentenceTransformer

@@ -21,11 +21,13 @@ class WhisperTranscriber:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GROQ_API_KEY
+        self.last_error: Optional[str] = None
 
     def download_audio_from_url(self, post_url: str) -> Optional[str]:
         """Use yt-dlp to extract a lightweight audio file (.mp3) from a video post URL."""
         if not post_url:
             return None
+        self.last_error = None
 
         try:
             import yt_dlp
@@ -59,6 +61,7 @@ class WhisperTranscriber:
                 }],
                 "quiet": True,
                 "no_warnings": True,
+                "socket_timeout": 15,
                 "max_filesize": 10 * 1024 * 1024,  # Max 10MB audio safety cap
             }
 
@@ -164,35 +167,46 @@ class WhisperTranscriber:
                 audio_b64 = base64.b64encode(f.read()).decode("utf-8")
 
             mime_type = "video/mp4" if audio_filepath.lower().endswith(".mp4") else "audio/mp3"
-            models_to_try = ["gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash-lite", "gemini-2.5-flash"]
+            models_to_try = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
             headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
-            for model_id in models_to_try:
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
-                payload = {
-                    "contents": [{
-                        "parts": [
-                            {"inline_data": {"mime_type": mime_type, "data": audio_b64}},
-                            {"text": "You are an expert Amharic and English speech-to-text transcriber. Listen carefully to the spoken voiceover in this audio/video track and write out every spoken word verbatim in Ethiopic script (አማርኛ ፊደል) for Amharic or English script for English speech. Return only the raw verbatim transcript without conversational introduction."}
-                        ]
-                    }]
-                }
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                for model_id in models_to_try:
+                    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
+                    payload = {
+                        "contents": [{
+                            "parts": [
+                                {"inline_data": {"mime_type": mime_type, "data": audio_b64}},
+                                {"text": "You are an expert Amharic and English speech-to-text transcriber. Listen carefully to the spoken voiceover in this audio/video track and write out every spoken word verbatim in Ethiopic script (አማርኛ ፊደል) for Amharic or English script for English speech. Return only the raw verbatim transcript without conversational introduction."}
+                            ]
+                        }]
+                    }
 
-                async with httpx.AsyncClient(timeout=45.0) as client:
-                    resp = await client.post(gemini_url, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        candidates = resp.json().get("candidates", [])
-                        if candidates:
-                            txt = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-                            if txt:
-                                logger.info(f"Gemini Audio Transcription SUCCESS via [{model_id}] ({len(txt)} chars): '{txt[:60]}...'")
-                                return txt
-                    elif resp.status_code == 429:
-                        logger.info(f"Gemini model [{model_id}] hit 429 rate limit. Trying next model endpoint...")
-                        await asyncio.sleep(2.0)
-                    else:
-                        logger.warning(f"Gemini Audio [{model_id}] HTTP {resp.status_code}: {resp.text[:200]}")
+                    try:
+                        resp = await client.post(gemini_url, headers=headers, json=payload)
+                        if resp.status_code == 200:
+                            candidates = resp.json().get("candidates", [])
+                            if candidates:
+                                txt = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                                if txt:
+                                    logger.info(f"Gemini Audio Transcription SUCCESS via [{model_id}] ({len(txt)} chars): '{txt[:60]}...'")
+                                    self.last_error = None
+                                    return txt
+                        elif resp.status_code == 429:
+                            logger.info(f"Gemini model [{model_id}] hit 429 rate limit. Trying next model endpoint...")
+                            self.last_error = f"Gemini Audio [{model_id}] HTTP 429"
+                            await asyncio.sleep(2.0)
+                        else:
+                            err_msg = f"Gemini Audio [{model_id}] HTTP {resp.status_code}: {resp.text[:160]}"
+                            logger.warning(err_msg)
+                            self.last_error = err_msg
+                    except Exception as exc:
+                        err_detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                        self.last_error = f"Gemini Audio [{model_id}] {err_detail}"
+                        logger.warning(f"Gemini Audio [{model_id}] error: {err_detail}")
         except Exception as e:
-            logger.warning(f"Gemini Audio transcription note: {e}")
+            err_detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            self.last_error = f"Gemini Audio setup {err_detail}"
+            logger.warning(f"Gemini Audio transcription note: {err_detail}")
         return None
 
     async def transcribe_audio_file(self, audio_filepath: str) -> Optional[str]:
@@ -200,18 +214,18 @@ class WhisperTranscriber:
         if not os.path.exists(audio_filepath):
             return None
 
-        # ── Primary: Google Gemini Multimodal Audio API for Amharic ──
-        if settings.GEMINI_API_KEY:
-            gemini_transcript = await self.transcribe_audio_file_with_gemini(audio_filepath)
-            if gemini_transcript:
-                return gemini_transcript
-
-        # ── Secondary: Groq Whisper API ──
-        if not self.api_key:
-            logger.warning("No GROQ_API_KEY configured — skipping audio transcription.")
-            return None
-
         try:
+            # ── Primary: Google Gemini Multimodal Audio API for Amharic ──
+            if settings.GEMINI_API_KEY:
+                gemini_transcript = await self.transcribe_audio_file_with_gemini(audio_filepath)
+                if gemini_transcript:
+                    return gemini_transcript
+
+            # ── Secondary: Groq Whisper API ──
+            if not self.api_key:
+                logger.warning("No GROQ_API_KEY configured — skipping audio transcription.")
+                return None
+
             headers = {"Authorization": f"Bearer {self.api_key}"}
 
             with open(audio_filepath, "rb") as audio_file:
@@ -230,14 +244,17 @@ class WhisperTranscriber:
                         logger.info(f"Whisper transcription SUCCESS ({len(transcript)} chars): '{transcript[:60]}...'")
                         return transcript
                     else:
-                        logger.warning(f"Groq Whisper HTTP {res.status_code}: {res.text}")
+                        err_msg = f"Groq Whisper HTTP {res.status_code}: {res.text[:160]}"
+                        logger.warning(err_msg)
+                        self.last_error = err_msg
                         return None
 
         except Exception as e:
-            logger.error(f"Whisper API transcription error: {e}")
+            err_detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            self.last_error = f"Whisper API {err_detail}"
+            logger.error(f"Whisper API transcription error: {err_detail}")
             return None
         finally:
-            # Clean up temp audio file
             try:
                 if os.path.exists(audio_filepath):
                     os.remove(audio_filepath)

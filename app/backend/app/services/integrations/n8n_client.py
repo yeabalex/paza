@@ -15,6 +15,17 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _format_error_logs_block(error_logs: Optional[list]) -> str:
+    """Format concise, HTML-escaped failure log lines for Telegram alerts."""
+    cleaned = [str(item).strip() for item in (error_logs or []) if str(item).strip()]
+    if not cleaned:
+        return ""
+    lines = [f"  • <code>{html.escape(entry[:220])}</code>" for entry in cleaned[:6]]
+    if len(cleaned) > 6:
+        lines.append(f"  <i>+{len(cleaned) - 6} more errors (check backend logs)</i>")
+    return "\n\n⚠️ <b>Failure Logs:</b>\n" + "\n".join(lines)
+
+
 def format_pipeline_telegram_message(
     job_id: str,
     status: Literal["success", "failed"],
@@ -25,17 +36,19 @@ def format_pipeline_telegram_message(
     """Format a pipeline job result into a clean Telegram HTML message."""
     safe_job_id = html.escape(str(job_id))
     safe_source = html.escape(str(trigger_source))
+    data = summary or {}
+    logs_block = _format_error_logs_block(data.get("error_logs"))
 
     if status == "failed":
-        safe_error = html.escape((error or "Unknown pipeline error")[:600])
+        safe_error = html.escape((error or "Unknown pipeline error")[:800])
         return (
             "❌ <b>Paza Scraper Pipeline Failed</b>\n"
             f"• <b>Job ID:</b> <code>{safe_job_id}</code>\n"
             f"• <b>Triggered By:</b> {safe_source}\n"
             f"• <b>Error:</b> <code>{safe_error}</code>"
+            f"{logs_block}"
         )
 
-    data = summary or {}
     titles = data.get("extracted_titles") or []
     titles_block = ""
     if titles:
@@ -43,8 +56,17 @@ def format_pipeline_telegram_message(
         extra = f"\n  <i>+{len(titles) - 5} more</i>" if len(titles) > 5 else ""
         titles_block = f"\n\n📌 <b>Extracted Events:</b>\n{preview}{extra}"
 
+    failed_transcriptions = data.get("failed_transcriptions", 0)
+    failed_extractions = data.get("failed_extractions", 0)
+    has_warnings = bool(logs_block or failed_transcriptions or failed_extractions)
+    header = (
+        "⚠️ <b>Paza Scraper Pipeline Completed (With Errors)</b>"
+        if has_warnings
+        else "✅ <b>Paza Scraper Pipeline Completed</b>"
+    )
+
     return (
-        "✅ <b>Paza Scraper Pipeline Completed</b>\n"
+        f"{header}\n"
         f"• <b>Job ID:</b> <code>{safe_job_id}</code>\n"
         f"• <b>Triggered By:</b> {safe_source}\n"
         f"• <b>Duration:</b> {data.get('duration_seconds', 0)}s\n"
@@ -54,8 +76,9 @@ def format_pipeline_telegram_message(
         f"• <b>Passed Skipped / Cleaned:</b> "
         f"{data.get('passed_events_skipped', 0)} / {data.get('passed_events_cleaned', 0)}\n"
         f"• <b>Failures (Transcribe / LLM):</b> "
-        f"{data.get('failed_transcriptions', 0)} / {data.get('failed_extractions', 0)}"
+        f"{failed_transcriptions} / {failed_extractions}"
         f"{titles_block}"
+        f"{logs_block}"
     )
 
 
@@ -147,6 +170,7 @@ class N8nWebhookClient:
         self._api_key_header_override = api_key_header
         self._timeout_override = timeout_seconds
         self._max_retries = max_retries
+        self.last_error: Optional[str] = None
 
     @property
     def webhook_url(self) -> str:
@@ -176,12 +200,15 @@ class N8nWebhookClient:
         callback_url: Optional[str] = None,
     ) -> bool:
         """Dispatch job completion JSON to n8n webhook authenticated with N8N_API_KEY."""
+        self.last_error = None
         target_url = (callback_url or self.webhook_url).strip()
         if not target_url:
+            self.last_error = "N8N_WEBHOOK_URL is not configured."
             logger.info(f"Skipping n8n callback for job [{job_id}]: N8N_WEBHOOK_URL is not configured.")
             return False
 
         if not self.api_key:
+            self.last_error = "N8N_API_KEY is not configured."
             logger.error(
                 f"Refusing outbound n8n callback for job [{job_id}]: "
                 "N8N_API_KEY is not configured (two-way API key protection required)."
@@ -221,13 +248,16 @@ class N8nWebhookClient:
                     if 200 <= resp.status_code < 300:
                         logger.info(f"Delivered n8n callback for job [{job_id}] -> HTTP {resp.status_code}")
                         return True
+                    self.last_error = f"HTTP {resp.status_code}: {resp.text[:160]}"
                     logger.warning(
                         f"n8n callback attempt {attempt + 1} for job [{job_id}] returned HTTP {resp.status_code}: {resp.text[:200]}"
                     )
                     if resp.status_code < 500:
                         return False
             except Exception as exc:
-                logger.warning(f"n8n callback attempt {attempt + 1} failed for job [{job_id}]: {exc}")
+                err_detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                self.last_error = err_detail
+                logger.warning(f"n8n callback attempt {attempt + 1} failed for job [{job_id}]: {err_detail}")
 
             if attempt < self._max_retries:
                 await asyncio.sleep(1.0 * (attempt + 1))

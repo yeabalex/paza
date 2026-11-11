@@ -27,6 +27,7 @@ class ScraperProducer:
     ):
         self.queue_manager = queue_manager
         self.scraper = scraper or RealTelegramScraper()
+        self.last_errors: List[str] = []
 
 
     async def run_producer_cycle(self, channels: List[ChannelConfig]) -> List[ChannelConfig]:
@@ -162,6 +163,7 @@ class ScraperProducer:
         Returns the updated targets list with refreshed watermarks.
         """
         active_targets = [t for t in targets if t.is_active]
+        self.last_errors = []
         logger.info(f"=== Unified Producer Cycle: {len(active_targets)} active targets ===")
         staged_total = 0
 
@@ -220,7 +222,9 @@ class ScraperProducer:
                     target.last_watermark = tt_config.last_video_id
 
             except Exception as e:
-                logger.error(f"Error scraping [{platform}:{ttype}] '{value}': {e}")
+                err_detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                logger.error(f"Error scraping [{platform}:{ttype}] '{value}': {err_detail}")
+                self.last_errors.append(f"Scrape [{platform}] @{value}: {err_detail}")
                 continue
 
             # Stage & queue each message

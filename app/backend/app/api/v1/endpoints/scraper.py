@@ -63,11 +63,17 @@ async def _execute_and_notify(
             )
         telegram_sent = False
         if not notified:
+            n8n_err = getattr(n8n_client, "last_error", None)
+            tg_summary = dict(summary)
+            if notify_n8n and n8n_err:
+                existing_logs = list(tg_summary.get("error_logs") or [])
+                existing_logs.append(f"n8n callback failed ({n8n_err})")
+                tg_summary["error_logs"] = existing_logs
             telegram_sent = await telegram_notifier.notify_pipeline_result(
                 job_id=job_id,
                 status="success",
                 trigger_source=trigger_source,
-                summary=summary,
+                summary=tg_summary,
             )
         job_store.mark_completed(
             job_id=job_id,
@@ -79,7 +85,7 @@ async def _execute_and_notify(
         logger.info(f"Pipeline job [{job_id}] finished (n8n_notified={notified}, telegram_notified={telegram_sent}).")
         return summary
     except Exception as exc:
-        err_msg = str(exc)
+        err_msg = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
         logger.error(f"Pipeline job [{job_id}] failed: {err_msg}")
         notified = False
         if notify_n8n:
@@ -93,10 +99,13 @@ async def _execute_and_notify(
             )
         telegram_sent = False
         if not notified:
+            n8n_err = getattr(n8n_client, "last_error", None)
+            tg_summary = {"error_logs": [f"n8n callback failed ({n8n_err})"]} if (notify_n8n and n8n_err) else None
             telegram_sent = await telegram_notifier.notify_pipeline_result(
                 job_id=job_id,
                 status="failed",
                 trigger_source=trigger_source,
+                summary=tg_summary,
                 error=err_msg,
             )
         job_store.mark_completed(
