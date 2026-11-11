@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ClerkProvider, useAuth, useClerk, useUser } from '@clerk/react';
 import { setAuthTokenProvider } from '../api/client';
 import {
@@ -14,10 +14,15 @@ function ClerkAuthBridge({ children }: { children: ReactNode }) {
   const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const { isLoaded: userLoaded, user } = useUser();
   const clerk = useClerk();
+  const [providerReady, setProviderReady] = useState(false);
 
   useEffect(() => {
     setAuthTokenProvider(() => getToken());
-    return () => setAuthTokenProvider(null);
+    const frame = requestAnimationFrame(() => setProviderReady(true));
+    return () => {
+      cancelAnimationFrame(frame);
+      setAuthTokenProvider(null);
+    };
   }, [getToken]);
 
   const mappedUser: AuthUserInfo | null = user
@@ -33,7 +38,7 @@ function ClerkAuthBridge({ children }: { children: ReactNode }) {
 
   const value: AppAuthState = {
     isClerkEnabled: true,
-    isLoaded: authLoaded && userLoaded,
+    isLoaded: authLoaded && userLoaded && providerReady,
     isSignedIn: Boolean(isSignedIn),
     user: mappedUser,
     getToken,

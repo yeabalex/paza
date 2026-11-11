@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ShieldCheck,
   AlertTriangle,
+  Users,
 } from 'lucide-react';
 import type { EventItem, RsvpUser, User } from '../../types';
 import {
@@ -49,7 +50,8 @@ export function EventDetail({
   const { isClerkEnabled, isSignedIn, openSignIn } = useAppAuth();
   const [copied, setCopied] = useState(false);
   const [fullDetail, setFullDetail] = useState<EventDetailItem | null>(null);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(true);
+  const [loadedEventId, setLoadedEventId] = useState<string | null>(null);
+  const [heroImgError, setHeroImgError] = useState(false);
 
   // RSVP state
   const [rsvps, setRsvps] = useState<RsvpUser[]>([]);
@@ -59,25 +61,27 @@ export function EventDetail({
   const [showRsvpPaymentModal, setShowRsvpPaymentModal] = useState(false);
   const [isSubmittingRsvp, setIsSubmittingRsvp] = useState(false);
 
-  // Fetch full detail + RSVP list on mount
+  const isLoadingDetail = loadedEventId !== event.id;
+
+  // Fetch full detail + RSVP list on mount / event switch
   useEffect(() => {
     let isMounted = true;
-    setIsLoadingDetail(true);
 
-    Promise.all([fetchEventDetail(event.id), fetchRsvps(event.id)]).then(
-      ([detail, rsvpList]) => {
+    Promise.all([fetchEventDetail(event.id), fetchRsvps(event.id)])
+      .then(([detail, rsvpList]) => {
         if (!isMounted) return;
-        if (detail) setFullDetail(detail);
+        setFullDetail(detail || null);
         setRsvps(rsvpList);
-        // Check if current user is already going
         if (currentUser && rsvpList.some((r) => r.telegram_id === currentUser.id)) {
           setIsGoing(true);
+        } else {
+          setIsGoing(false);
         }
-        setIsLoadingDetail(false);
-      }
-    ).catch(() => {
-      if (isMounted) setIsLoadingDetail(false);
-    });
+        setLoadedEventId(event.id);
+      })
+      .catch(() => {
+        if (isMounted) setLoadedEventId(event.id);
+      });
 
     return () => {
       isMounted = false;
@@ -88,10 +92,12 @@ export function EventDetail({
 
   // Date & Time formatting with end_datetime support
   const startDate = activeData.start_datetime ? new Date(activeData.start_datetime) : null;
+  const isValidStart = startDate !== null && !Number.isNaN(startDate.getTime());
   const endDate = fullDetail?.end_datetime ? new Date(fullDetail.end_datetime) : null;
+  const isValidEnd = endDate !== null && !Number.isNaN(endDate.getTime());
 
   let dateString = 'Date to be announced';
-  if (startDate) {
+  if (isValidStart && startDate) {
     const startFmt = startDate.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
@@ -99,7 +105,7 @@ export function EventDetail({
       year: 'numeric',
     });
 
-    if (endDate) {
+    if (isValidEnd && endDate) {
       const isSameDay =
         startDate.getFullYear() === endDate.getFullYear() &&
         startDate.getMonth() === endDate.getMonth() &&
@@ -121,14 +127,14 @@ export function EventDetail({
   }
 
   let timeString: string | null = null;
-  if (startDate) {
+  if (isValidStart && startDate) {
     const startTimeStr = startDate.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
     });
 
-    if (endDate) {
+    if (isValidEnd && endDate) {
       const endTimeStr = endDate.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
@@ -140,7 +146,7 @@ export function EventDetail({
     }
   }
 
-  // Google Maps URLs: search by venue landmark name for a rich place card on Google Maps
+  // Google Maps URLs
   const gpsCoords = fullDetail?.location_gps;
 
   const venueQuery = `${activeData.venue_name || 'Addis Ababa'}${
@@ -173,7 +179,6 @@ export function EventDetail({
     }
 
     if (isGoing) {
-      // Remove RSVP
       setIsSubmittingRsvp(true);
       const success = await removeGoing(event.id, currentUser.id);
       if (success) {
@@ -182,301 +187,423 @@ export function EventDetail({
       }
       setIsSubmittingRsvp(false);
     } else {
-      // Open Payment & Registration Modal
       setShowRsvpPaymentModal(true);
     }
   };
 
-  const hasImage = Boolean(activeData.image_url && activeData.image_url.trim().length > 0);
+  const hasImage = Boolean(
+    activeData.image_url && activeData.image_url.trim().length > 0 && !heroImgError
+  );
+
+  // Derive social post link
+  const idParts = (activeData.id || '').split(':');
+  const idPrefix = idParts[0]?.toLowerCase();
+  const idRest = idParts.slice(1).join(':');
+  const postUrl =
+    activeData.post_url ||
+    (idPrefix === 'ig' || idPrefix === 'instagram'
+      ? `https://www.instagram.com/p/${idRest}/`
+      : idPrefix === 'tg' || idPrefix === 'telegram'
+      ? `https://t.me/s/${idRest}`
+      : idPrefix === 'tiktok'
+      ? `https://www.tiktok.com/@${idRest}`
+      : undefined);
+
+  let platformType: 'instagram' | 'telegram' | 'tiktok' | 'web' = 'web';
+  if (postUrl) {
+    const urlLower = postUrl.toLowerCase();
+    const idLower = activeData.id.toLowerCase();
+    if (urlLower.includes('instagram') || idLower.startsWith('ig:') || idLower.startsWith('instagram:')) {
+      platformType = 'instagram';
+    } else if (urlLower.includes('t.me') || idLower.startsWith('tg:') || idLower.startsWith('telegram:')) {
+      platformType = 'telegram';
+    } else if (urlLower.includes('tiktok') || idLower.startsWith('tiktok:')) {
+      platformType = 'tiktok';
+    }
+  }
 
   return (
     <div className="event-detail-page">
-      {/* ── Top Header Navigation Bar ── */}
-      <header className="event-detail-nav">
-        <button type="button" className="detail-nav-btn" onClick={onBack} title="Back">
-          <ArrowLeft size={18} />
-        </button>
-
-        <div className="detail-nav-actions">
-          <button type="button" className="detail-nav-btn" onClick={handleShare} title="Share">
-            <Share2 size={18} />
+      {/* ── Top Back / Utility Bar ── */}
+      <div className="event-detail-nav">
+        <div className="event-detail-nav-inner">
+          <button type="button" className="detail-back-pill" onClick={onBack} title="Back to events">
+            <ArrowLeft size={16} />
+            <span>Back to Events</span>
           </button>
 
-          <button
-            type="button"
-            className={`detail-nav-btn ${isJoined ? 'saved' : ''}`}
-            onClick={() => onToggleJoin(activeData.id)}
-            title={isJoined ? 'Unsave event' : 'Save event'}
-          >
-            <Bookmark
-              size={18}
-              fill={isJoined ? 'var(--accent)' : 'none'}
-              color={isJoined ? 'var(--accent)' : 'var(--text-primary)'}
-            />
-          </button>
-        </div>
-      </header>
+          <div className="detail-nav-actions">
+            <button type="button" className="detail-nav-pill" onClick={handleShare} title="Invite & Share">
+              <Share2 size={15} />
+              <span className="detail-pill-text">Invite</span>
+            </button>
 
-      {/* ── Hero Image (Only if image URL exists) ── */}
-      {hasImage && (
-        <div className="event-detail-hero">
-          <img src={activeData.image_url} alt={activeData.title} className="detail-hero-img" />
-          <div className="detail-hero-overlay" />
-        </div>
-      )}
-
-      {/* ── Main Content Container ── */}
-      <div className="event-detail-content">
-        {/* Organizer Host Header Card */}
-        {(activeData.organizer_name || activeData.source_type === 'organizer') && (
-          <>
-            <div
-              style={{
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '12px',
-                padding: '12px 14px',
-                marginBottom: '8px',
-              }}
+            <button
+              type="button"
+              className={`detail-nav-pill ${isJoined ? 'saved' : ''}`}
+              onClick={() => onToggleJoin(activeData.id)}
+              title={isJoined ? 'Unsave event' : 'Save event'}
             >
-              <OrganizerHeaderBadge
-                organizerName={activeData.organizer_name || 'Organizer Host'}
-                organizerUsername={activeData.organizer_username}
-                organizerLogo={activeData.organizer_logo}
-                isVerified={activeData.is_organizer_verified}
-                eventsCount={activeData.organizer_events_count}
-                size="md"
+              <Bookmark
+                size={15}
+                fill={isJoined ? 'var(--accent)' : 'none'}
+                color={isJoined ? 'var(--accent)' : 'var(--text-primary)'}
               />
-            </div>
+              <span className="detail-pill-text">{isJoined ? 'Saved' : 'Save'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
-            {/* Organizer Verification Indicator below the box */}
-            {activeData.is_organizer_verified ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginBottom: '14px',
-                  fontSize: '11px',
-                  color: '#4ade80',
-                  fontWeight: 500,
-                  paddingLeft: '4px',
-                }}
-              >
-                <ShieldCheck size={14} style={{ color: '#22c55e' }} />
-                <span>Verified Organizer</span>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginBottom: '14px',
-                  fontSize: '11px',
-                  color: '#ef4444',
-                  fontWeight: 500,
-                  paddingLeft: '4px',
-                }}
-              >
-                <AlertTriangle size={14} style={{ color: '#ef4444', flexShrink: 0 }} />
-                <span>Organizer not verified, be cautious with your money</span>
+      {/* ── Desktop Two-Column / Mobile Stacked Container ── */}
+      <div className="detail-shell">
+        <div className="detail-layout">
+          {/* ── LEFT MAIN EDITORIAL COLUMN ── */}
+          <div className="detail-main">
+            {hasImage && (
+              <div className="event-detail-hero">
+                <img
+                  src={activeData.image_url}
+                  alt={activeData.title}
+                  className="detail-hero-img"
+                  onError={() => setHeroImgError(true)}
+                />
+                <div className="detail-hero-overlay" />
               </div>
             )}
-          </>
-        )}
 
-        {/* Category & Fee Badges */}
-        <div className="detail-badge-row">
-          <span className="detail-category-badge">{activeData.category}</span>
-          <span className={`event-row-badge ${activeData.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
-            {activeData.entrance_fee_etb > 0 ? `${activeData.entrance_fee_etb} ETB` : 'FREE'}
-          </span>
-        </div>
+            <div className="detail-header-block">
+              <div className="detail-badge-row">
+                <span className="detail-category-badge">{activeData.category}</span>
+                {activeData.is_passed ? (
+                  <span className="event-row-badge ended">ENDED</span>
+                ) : (
+                  <span className={`event-row-badge ${activeData.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
+                    {activeData.entrance_fee_etb > 0 ? `${activeData.entrance_fee_etb} ETB` : 'FREE ENTRY'}
+                  </span>
+                )}
+              </div>
 
-        {/* Title */}
-        <h1 className="detail-title">{activeData.title}</h1>
-
-        {/* Meta Grid Cards (Date, Venue) */}
-        <div className="detail-meta-grid">
-          {/* Date & Time */}
-          <div className="meta-card">
-            <div className="meta-card-icon">
-              <Calendar size={18} />
+              <h1 className="detail-title">{activeData.title}</h1>
             </div>
-            <div className="meta-card-text">
-              <h4>{dateString}</h4>
-              {timeString && (
-                <p>
-                  <Clock size={12} /> {timeString}
-                </p>
-              )}
+
+            {/* Mobile Meta Grid (Desktop shows rich schedule card in right sidebar too) */}
+            <div className="detail-meta-grid mobile-only-meta">
+              <div className="meta-card">
+                <div className="meta-card-icon">
+                  <Calendar size={18} />
+                </div>
+                <div className="meta-card-text">
+                  <h4>{dateString}</h4>
+                  {timeString && (
+                    <p>
+                      <Clock size={12} /> {timeString}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="meta-card meta-card-location">
+                <div className="meta-card-icon">
+                  <MapPin size={18} />
+                </div>
+                <div className="meta-card-text">
+                  <h4>{activeData.venue_name || 'Addis Ababa'}</h4>
+                  <p>{activeData.sub_city ? `${activeData.sub_city}, Addis Ababa` : 'Ethiopia'}</p>
+                </div>
+                <a
+                  href={mapsSearchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="maps-link-btn"
+                  title="Open in Google Maps"
+                >
+                  <span>Maps</span>
+                  <ExternalLink size={13} />
+                </a>
+              </div>
             </div>
+
+            {/* About Section */}
+            <section className="detail-section-card">
+              <h2 className="section-heading">About This Event</h2>
+              <p className="detail-description">
+                {fullDetail?.description || activeData?.description || 'Event happening in Addis Ababa.'}
+              </p>
+            </section>
+
+            {/* Map Panel */}
+            <section className="detail-section-card map-card-panel">
+              <div className="map-card-header">
+                <div>
+                  <h2 className="section-heading">Venue Location</h2>
+                  <p className="map-card-subtitle">{venueQuery}</p>
+                </div>
+                <a
+                  href={mapsSearchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="maps-link-btn"
+                  title="Open in Google Maps"
+                >
+                  <span>Open Maps</span>
+                  <ExternalLink size={13} />
+                </a>
+              </div>
+
+              <div className="map-embed-container">
+                <iframe
+                  title="Venue Location Map"
+                  src={mapsEmbedUrl}
+                  className="map-embed-iframe"
+                  loading="lazy"
+                  allowFullScreen
+                />
+              </div>
+            </section>
+
+            {/* Social Source Button */}
+            {postUrl && (
+              <div className="social-source-container">
+                <a
+                  href={postUrl}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openExternalUrl(postUrl);
+                  }}
+                  className={`social-source-btn ${platformType}`}
+                  title={`View original post on ${
+                    platformType === 'instagram'
+                      ? 'Instagram'
+                      : platformType === 'telegram'
+                      ? 'Telegram'
+                      : platformType === 'tiktok'
+                      ? 'TikTok'
+                      : 'Source'
+                  }`}
+                >
+                  <div className="social-source-circle">
+                    {platformType === 'instagram' && (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                      </svg>
+                    )}
+                    {platformType === 'telegram' && (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.37.74-.56 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+                      </svg>
+                    )}
+                    {platformType === 'tiktok' && (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64c.29 0 .56.04.83.12V9.37a6.33 6.33 0 00-1-.08A6.26 6.26 0 003 15.55a6.26 6.26 0 0010.71 4.41h.01V12.1c1.55 1.1 3.41 1.75 5.43 1.75v-3.76a4.85 4.85 0 01-3.56-3.4z" />
+                      </svg>
+                    )}
+                    {platformType === 'web' && <ExternalLink size={18} />}
+                  </div>
+                  <span className="social-source-label">
+                    View original post on{' '}
+                    {platformType === 'instagram'
+                      ? 'Instagram'
+                      : platformType === 'telegram'
+                      ? 'Telegram'
+                      : platformType === 'tiktok'
+                      ? 'TikTok'
+                      : 'Source'}
+                  </span>
+                  <ExternalLink size={14} className="social-source-arrow" />
+                </a>
+              </div>
+            )}
           </div>
 
-          {/* Location */}
-          <div className="meta-card meta-card-location">
-            <div className="meta-card-icon">
-              <MapPin size={18} />
-            </div>
-            <div className="meta-card-text">
-              <h4>{activeData.venue_name || 'Addis Ababa'}</h4>
-              <p>{activeData.sub_city ? `${activeData.sub_city}, Addis Ababa` : 'Ethiopia'}</p>
-            </div>
-            <a
-              href={mapsSearchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="maps-link-btn"
-              title="Open in Google Maps"
-            >
-              <span>Maps</span>
-              <ExternalLink size={13} />
-            </a>
-          </div>
-        </div>
+          {/* ── RIGHT STICKY SIDEBAR ── */}
+          <aside className="detail-sidebar">
+            {/* Desktop RSVP & Ticket Box */}
+            <div className="detail-sidebar-card detail-rsvp-card">
+              <div className="detail-rsvp-price-row">
+                <div>
+                  <span className="dock-price-label">Admission</span>
+                  <div className="detail-sidebar-price">
+                    {activeData.entrance_fee_etb > 0 ? `${activeData.entrance_fee_etb} ETB` : 'FREE'}
+                  </div>
+                </div>
+                {activeData.is_passed ? (
+                  <span className="event-row-badge ended">Concluded</span>
+                ) : (
+                  <span className="detail-live-pill">Open RSVP</span>
+                )}
+              </div>
 
-        {/* About Section */}
-        <div className="detail-section">
-          <h3 className="section-heading">About This Event</h3>
-          <p className="detail-description">
-            {fullDetail?.description || activeData?.description || 'Event happening in Addis Ababa.'}
-          </p>
-        </div>
+              <button
+                type="button"
+                className={`sidebar-rsvp-btn ${isGoing ? 'going-active' : ''}`}
+                onClick={handleGoingClick}
+                disabled={isSubmittingRsvp}
+              >
+                {isGoing ? (
+                  <>
+                    <Check size={17} />
+                    <span>Going (Tap to Cancel)</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={17} />
+                    <span>I'm Going — RSVP</span>
+                  </>
+                )}
+              </button>
 
-        {/* ── Luma-style Avatar Stack — Who's Going ── */}
-        <div
-          className="going-section"
-          onClick={() => setShowGoingModal(true)}
-          style={{ cursor: 'pointer' }}
-        >
-          {isLoadingDetail ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div className="dot-loader" />
-              <span className="going-count">Loading attendees...</span>
+              <div className="sidebar-secondary-actions">
+                <button type="button" className="sidebar-ghost-btn" onClick={handleShare}>
+                  <Share2 size={15} />
+                  <span>Invite Friends</span>
+                </button>
+                <button
+                  type="button"
+                  className={`sidebar-ghost-btn ${isJoined ? 'saved' : ''}`}
+                  onClick={() => onToggleJoin(activeData.id)}
+                >
+                  <Bookmark
+                    size={15}
+                    fill={isJoined ? 'var(--accent)' : 'none'}
+                    color={isJoined ? 'var(--accent)' : 'currentColor'}
+                  />
+                  <span>{isJoined ? 'Saved' : 'Save'}</span>
+                </button>
+              </div>
             </div>
-          ) : rsvps.length > 0 ? (
-            <>
-              <div className="avatar-stack">
-                {rsvps.slice(0, MAX_AVATARS).map((user) => (
-                  <div key={user.telegram_id} className="avatar-stack-item" style={{ position: 'relative' }}>
-                    <span className="avatar-stack-initial" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {(user.first_name || user.full_name || 'A').charAt(0).toUpperCase()}
-                    </span>
-                    {user.photo_url && (
-                      <img
-                        src={user.photo_url}
-                        alt={user.first_name}
-                        style={{ position: 'relative', zIndex: 2, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
+
+            {/* Desktop Schedule & Venue Summary Card */}
+            <div className="detail-sidebar-card desktop-only-meta">
+              <h3 className="sidebar-card-title">Date & Location</h3>
+              <div className="detail-meta-grid">
+                <div className="meta-card">
+                  <div className="meta-card-icon">
+                    <Calendar size={18} />
+                  </div>
+                  <div className="meta-card-text">
+                    <h4>{dateString}</h4>
+                    {timeString && (
+                      <p>
+                        <Clock size={12} /> {timeString}
+                      </p>
                     )}
                   </div>
-                ))}
-                {rsvps.length > MAX_AVATARS && (
-                  <div className="avatar-stack-item avatar-stack-overflow">
-                    +{rsvps.length - MAX_AVATARS}
+                </div>
+
+                <div className="meta-card meta-card-location">
+                  <div className="meta-card-icon">
+                    <MapPin size={18} />
+                  </div>
+                  <div className="meta-card-text">
+                    <h4>{activeData.venue_name || 'Addis Ababa'}</h4>
+                    <p>{activeData.sub_city ? `${activeData.sub_city}, Addis Ababa` : 'Ethiopia'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Organizer Card */}
+            {(activeData.organizer_name || activeData.source_type === 'organizer') && (
+              <div className="detail-sidebar-card">
+                <h3 className="sidebar-card-title">Hosted By</h3>
+                <OrganizerHeaderBadge
+                  organizerName={activeData.organizer_name || 'Organizer Host'}
+                  organizerUsername={activeData.organizer_username}
+                  organizerLogo={activeData.organizer_logo}
+                  isVerified={activeData.is_organizer_verified}
+                  eventsCount={activeData.organizer_events_count}
+                  size="md"
+                />
+
+                {activeData.is_organizer_verified ? (
+                  <div className="organizer-status-note verified">
+                    <ShieldCheck size={14} />
+                    <span>Verified PAZA Organizer</span>
+                  </div>
+                ) : (
+                  <div className="organizer-status-note unverified">
+                    <AlertTriangle size={14} />
+                    <span>Organizer not verified — confirm payment details carefully</span>
                   </div>
                 )}
               </div>
-              <span className="going-count">
-                {rsvps.length} {rsvps.length === 1 ? 'person' : 'people'} going
-              </span>
-            </>
-          ) : (
-            <span className="going-count empty">Be the first to go!</span>
-          )}
-        </div>
+            )}
 
-        {/* ── Embedded Google Map ── */}
-        <div className="map-embed-container">
-          <iframe
-            title="Venue Location Map"
-            src={mapsEmbedUrl}
-            className="map-embed-iframe"
-            loading="lazy"
-            allowFullScreen
-          />
-        </div>
-
-        {/* ── Social Media Source Button (Displayed by default for scraped / social events) ── */}
-        {(() => {
-          const id = activeData.id || '';
-          const parts = id.split(':');
-          const prefix = parts[0]?.toLowerCase();
-          const rest = parts.slice(1).join(':');
-
-          const postUrl = activeData.post_url || (
-            prefix === 'ig' || prefix === 'instagram' ? `https://www.instagram.com/p/${rest}/` :
-            prefix === 'tg' || prefix === 'telegram' ? `https://t.me/s/${rest}` :
-            prefix === 'tiktok' ? `https://www.tiktok.com/@${rest}` :
-            undefined
-          );
-
-          if (!postUrl) return null;
-
-          let platformType: 'instagram' | 'telegram' | 'tiktok' | 'web' = 'web';
-          const urlLower = postUrl.toLowerCase();
-          const idLower = activeData.id.toLowerCase();
-
-          if (urlLower.includes('instagram') || idLower.startsWith('ig:') || idLower.startsWith('instagram:')) {
-            platformType = 'instagram';
-          } else if (urlLower.includes('t.me') || idLower.startsWith('tg:') || idLower.startsWith('telegram:')) {
-            platformType = 'telegram';
-          } else if (urlLower.includes('tiktok') || idLower.startsWith('tiktok:')) {
-            platformType = 'tiktok';
-          }
-
-          const handleOpenLink = (e: React.MouseEvent) => {
-            e.preventDefault();
-            openExternalUrl(postUrl);
-          };
-
-          return (
-            <div className="social-source-container">
-              <a
-                href={postUrl}
-                onClick={handleOpenLink}
-                className={`social-source-btn ${platformType}`}
-                title={`View original post on ${
-                  platformType === 'instagram' ? 'Instagram' : platformType === 'telegram' ? 'Telegram' : platformType === 'tiktok' ? 'TikTok' : 'Source'
-                }`}
-              >
-                <div className="social-source-circle">
-                  {platformType === 'instagram' && (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                    </svg>
-                  )}
-                  {platformType === 'telegram' && (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.37.74-.56 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-                    </svg>
-                  )}
-                  {platformType === 'tiktok' && (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64c.29 0 .56.04.83.12V9.37a6.33 6.33 0 00-1-.08A6.26 6.26 0 003 15.55a6.26 6.26 0 0010.71 4.41h.01V12.1c1.55 1.1 3.41 1.75 5.43 1.75v-3.76a4.85 4.85 0 01-3.56-3.4z"/>
-                    </svg>
-                  )}
-                  {platformType === 'web' && <ExternalLink size={18} />}
-                </div>
-                <span className="social-source-label">
-                  View on {platformType === 'instagram' ? 'Instagram' : platformType === 'telegram' ? 'Telegram' : platformType === 'tiktok' ? 'TikTok' : 'Original Post'}
+            {/* Attendees Card */}
+            <div
+              className="detail-sidebar-card detail-attendees-card"
+              onClick={() => setShowGoingModal(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setShowGoingModal(true);
+                }
+              }}
+            >
+              <div className="attendees-card-top">
+                <h3 className="sidebar-card-title">Who's Going</h3>
+                <span className="attendees-view-link">
+                  <Users size={13} />
+                  View list
                 </span>
-                <ExternalLink size={14} className="social-source-arrow" />
-              </a>
+              </div>
+
+              <div className="going-section">
+                {isLoadingDetail ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="dot-loader" />
+                    <span className="going-count">Loading attendees...</span>
+                  </div>
+                ) : rsvps.length > 0 ? (
+                  <>
+                    <div className="avatar-stack">
+                      {rsvps.slice(0, MAX_AVATARS).map((rsvpUser) => (
+                        <div key={rsvpUser.telegram_id} className="avatar-stack-item" style={{ position: 'relative' }}>
+                          <span
+                            className="avatar-stack-initial"
+                            style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            {(rsvpUser.first_name || rsvpUser.full_name || 'A').charAt(0).toUpperCase()}
+                          </span>
+                          {rsvpUser.photo_url && (
+                            <img
+                              src={rsvpUser.photo_url}
+                              alt={rsvpUser.first_name}
+                              style={{ position: 'relative', zIndex: 2, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          )}
+                        </div>
+                      ))}
+                      {rsvps.length > MAX_AVATARS && (
+                        <div className="avatar-stack-item avatar-stack-overflow">
+                          +{rsvps.length - MAX_AVATARS}
+                        </div>
+                      )}
+                    </div>
+                    <span className="going-count">
+                      {rsvps.length} {rsvps.length === 1 ? 'person' : 'people'} going
+                    </span>
+                  </>
+                ) : (
+                  <span className="going-count empty">Be the first to RSVP!</span>
+                )}
+              </div>
             </div>
-          );
-        })()}
+          </aside>
+        </div>
 
         {copied && <div className="detail-toast">Link copied to clipboard!</div>}
       </div>
 
-      {/* ── Fixed Bottom Action Dock ── */}
+      {/* ── Mobile Sticky Bottom Action Dock ── */}
       <div className="event-detail-bottom-dock">
         <div className="dock-price-col">
           <span className="dock-price-label">Price</span>
@@ -503,7 +630,7 @@ export function EventDetail({
         </button>
       </div>
 
-      {/* ── RSVP Payment & Registration Modal ── */}
+      {/* ── Modals ── */}
       {showRsvpPaymentModal && (
         <RsvpPaymentModal
           event={activeData}
@@ -517,18 +644,10 @@ export function EventDetail({
         />
       )}
 
-      {/* ── Going Modal ── */}
-      {showGoingModal && (
-        <GoingModal rsvps={rsvps} onClose={() => setShowGoingModal(false)} />
-      )}
+      {showGoingModal && <GoingModal rsvps={rsvps} onClose={() => setShowGoingModal(false)} />}
 
-      {/* ── Custom Invite Artwork Modal ── */}
       {showInviteModal && (
-        <InviteCustomizerModal
-          event={activeData}
-          user={currentUser}
-          onClose={() => setShowInviteModal(false)}
-        />
+        <InviteCustomizerModal event={activeData} user={currentUser} onClose={() => setShowInviteModal(false)} />
       )}
     </div>
   );

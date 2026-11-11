@@ -427,3 +427,132 @@ class TestTelegramNotifier(unittest.IsolatedAsyncioTestCase):
         job_store._jobs.pop("job_tg_fallback", None)
 
 
+class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
+    """Ensure all protected user, event, organizer, and server endpoints fail closed."""
+
+    async def test_unauthenticated_requests_rejected_across_protected_endpoints(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Public health probe remains accessible
+            health_res = await client.get("/api/v1/health")
+            self.assertEqual(health_res.status_code, 200)
+
+            protected_gets = [
+                "/api/v1/events/categories",
+                "/api/v1/events/explore",
+                "/api/v1/events/past",
+                "/api/v1/events/for-you",
+                "/api/v1/events",
+                "/api/v1/events/detail/ig:123",
+                "/api/v1/events/verify-ticket?event_id=ig:123&ticket_code=ABC123",
+                "/api/v1/events/rsvp?event_id=ig:123",
+                "/api/v1/events/saved-scraped",
+                "/api/v1/events/user-rsvps",
+                "/api/v1/users/interests",
+                "/api/v1/users/me",
+                "/api/v1/users/search?query=test",
+                "/api/v1/organizers/me",
+                "/api/v1/organizers/check-username?username=paza",
+                "/api/v1/organizers/events",
+                "/api/v1/organizers/categories",
+                "/api/v1/organizers/events/00000000-0000-0000-0000-000000000001/rsvps",
+            ]
+            for path in protected_gets:
+                res = await client.get(path)
+                self.assertEqual(res.status_code, 401, f"Expected 401 for unauthenticated GET {path}, got {res.status_code}")
+
+            protected_posts = [
+                ("/api/v1/users/interests", {"interest_slugs": ["music"]}),
+                ("/api/v1/events/save-scraped", {"event_id": "ig:1", "event_data": {}}),
+                ("/api/v1/events/rsvp", {"event_id": "ig:1", "first_name": "Test"}),
+                ("/api/v1/organizers/events", {}),
+                ("/api/v1/organizers/rsvps/confirm", {"event_id": "00000000-0000-0000-0000-000000000001", "telegram_id": 1}),
+            ]
+            for path, payload in protected_posts:
+                res = await client.post(path, json=payload)
+                self.assertEqual(res.status_code, 401, f"Expected 401 for unauthenticated POST {path}, got {res.status_code}")
+
+    async def test_authenticated_clerk_token_allows_protected_event_route(self):
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        now = int(time.time())
+        token = jwt.encode(
+            {"sub": "user_auth_ok", "email": "member@paza.et", "exp": now + 300},
+            priv,
+            algorithm="RS256",
+        )
+
+        transport = ASGITransport(app=app)
+        with (
+            patch.object(security_module, "clerk_verifier", verifier),
+            patch(
+                "app.api.v1.endpoints.events.EventRepository.get_event_categories",
+                new=AsyncMock(return_value=[]),
+            ),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                unauth_res = await client.get("/api/v1/events/categories")
+                self.assertEqual(unauth_res.status_code, 401)
+
+                auth_res = await client.get(
+                    "/api/v1/events/categories",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                self.assertEqual(auth_res.status_code, 200)
+                self.assertEqual(auth_res.json(), [])
+
+    async def test_legacy_jwt_empty_secret_rejected_and_google_requires_id_token(self):
+        with patch.object(settings, "JWT_SECRET_KEY", ""):
+            header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').decode().rstrip("=")
+            payload = base64.urlsafe_b64encode(
+                json.dumps({"sub": "attacker", "exp": int(time.time()) + 300}).encode()
+            ).decode().rstrip("=")
+            import hmac as _hmac
+            import hashlib as _hashlib
+            sig = base64.urlsafe_b64encode(
+                _hmac.new(b"", f"{header}.{payload}".encode(), _hashlib.sha256).digest()
+            ).decode().rstrip("=")
+            forged = f"{header}.{payload}.{sig}"
+            self.assertIsNone(security_module.decode_access_token(forged))
+
+        transport = ASGITransport(app=app)
+        with patch.object(settings, "JWT_SECRET_KEY", "test-org-secret"):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                res = await client.post(
+                    "/api/v1/organizers/auth/google",
+                    json={"google_id": "fake-id", "email": "victim@paza.et"},
+                )
+                self.assertEqual(res.status_code, 401)
+
+    async def test_organizer_rsvp_idor_blocked(self):
+        from types import SimpleNamespace
+        from uuid import UUID
+        from app.api.v1.endpoints.organizers import get_current_organizer_from_token
+        from app.db.session import get_db
+
+        async def _fake_db():
+            yield object()
+
+        fake_org = SimpleNamespace(id=UUID("11111111-1111-1111-1111-111111111111"))
+        app.dependency_overrides[get_current_organizer_from_token] = lambda: fake_org
+        app.dependency_overrides[get_db] = _fake_db
+        try:
+            transport = ASGITransport(app=app)
+            with patch(
+                "app.api.v1.endpoints.organizers.EventRepository.get_organizer_event",
+                new=AsyncMock(return_value=None),
+            ):
+                async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    r1 = await client.get("/api/v1/organizers/events/22222222-2222-2222-2222-222222222222/rsvps")
+                    self.assertEqual(r1.status_code, 404)
+
+                    r2 = await client.post(
+                        "/api/v1/organizers/rsvps/confirm",
+                        json={"event_id": "22222222-2222-2222-2222-222222222222", "telegram_id": 123},
+                    )
+                    self.assertEqual(r2.status_code, 404)
+        finally:
+            app.dependency_overrides.pop(get_current_organizer_from_token, None)
+            app.dependency_overrides.pop(get_db, None)
+
+

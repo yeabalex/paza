@@ -10,27 +10,12 @@ export function AuthControls() {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div className="auth-controls">
       <Show when="signed-out">
         <SignInButton mode="modal">
-          <button
-            type="button"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '20px',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
-              background: 'rgba(255, 255, 255, 0.08)',
-              color: 'var(--text-primary)',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
+          <button type="button" className="auth-signin-btn">
             <LogIn size={14} />
-            Sign In
+            <span>Sign In</span>
           </button>
         </SignInButton>
       </Show>
@@ -38,7 +23,7 @@ export function AuthControls() {
         <UserButton
           appearance={{
             elements: {
-              avatarBox: { width: '30px', height: '30px' },
+              avatarBox: { width: '32px', height: '32px' },
             },
           }}
         />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Copy, Check, Upload, CreditCard, User, FileText, ExternalLink } from 'lucide-react';
 import type { EventItem, RsvpUser, User as AppUser } from '../../types';
 import type { EventDetailItem } from '../../api/events';
@@ -31,19 +31,10 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
     : '';
 
   const [fullName, setFullName] = useState(initialName);
-  const [paymentMethod, setPaymentMethod] = useState<'Telebirr' | 'CBE' | 'Other'>(
-    event.telebirr_phone ? 'Telebirr' : event.cbe_account ? 'CBE' : 'Other'
-  );
-
-  useEffect(() => {
-    if (event.telebirr_phone) {
-      setPaymentMethod('Telebirr');
-    } else if (event.cbe_account) {
-      setPaymentMethod('CBE');
-    } else {
-      setPaymentMethod('Other');
-    }
-  }, [event.telebirr_phone, event.cbe_account]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'Telebirr' | 'CBE' | 'Other' | null>(null);
+  const paymentMethod: 'Telebirr' | 'CBE' | 'Other' =
+    selectedPaymentMethod ?? (event.telebirr_phone ? 'Telebirr' : event.cbe_account ? 'CBE' : 'Other');
+  const setPaymentMethod = (method: 'Telebirr' | 'CBE' | 'Other') => setSelectedPaymentMethod(method);
   const [transactionId, setTransactionId] = useState('');
   const [message, setMessage] = useState('');
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
@@ -618,7 +609,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                 >
                   <Upload size={20} style={{ color: 'var(--accent)' }} />
                   <span style={{ fontSize: '12px', fontWeight: 600, color: '#ffffff' }}>
-                    {isUploading ? 'Uploading to Cloudinary...' : 'Click to upload receipt screenshot'}
+                    {isUploading ? 'Uploading receipt screenshot...' : 'Click to upload receipt screenshot'}
                   </span>
                   <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                     {isUploading ? 'Please wait a moment' : 'PNG, JPG up to 10MB'}

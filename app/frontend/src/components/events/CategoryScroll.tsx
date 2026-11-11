@@ -8,13 +8,14 @@ interface CategoryScrollProps {
   onSelectCategory: (category: string) => void;
 }
 
-const MAX_INLINE = 4;
+const MAX_INLINE = 6;
 
 export function CategoryScroll({ categories, activeCategory, onSelectCategory }: CategoryScrollProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const inlineCategories = categories.slice(0, MAX_INLINE);
   const overflowCategories = categories.slice(MAX_INLINE);
+  const activeOverflowCat = overflowCategories.find((c) => c.slug === activeCategory);
 
   return (
     <div className="filter-section">
@@ -25,8 +26,9 @@ export function CategoryScroll({ categories, activeCategory, onSelectCategory }:
           className={`pill-btn ${activeCategory === 'all' ? 'active' : ''}`}
           onClick={() => onSelectCategory('all')}
         >
-          All
+          All Events
         </button>
+
         {inlineCategories.map((cat) => (
           <button
             key={cat.slug}
@@ -34,26 +36,42 @@ export function CategoryScroll({ categories, activeCategory, onSelectCategory }:
             className={`pill-btn ${activeCategory === cat.slug ? 'active' : ''}`}
             onClick={() => onSelectCategory(cat.slug)}
           >
-            {cat.label.split(' & ')[0]}
-            {cat.count !== undefined && cat.count > 0 && <span className="pill-count">{cat.count}</span>}
+            <span>{cat.label.split(' & ')[0]}</span>
+            {cat.count !== undefined && cat.count > 0 && (
+              <span className="pill-count">{cat.count}</span>
+            )}
           </button>
         ))}
 
-        {/* Show "More" toggle only if overflow exists */}
+        {activeOverflowCat && (
+          <button
+            type="button"
+            className="pill-btn active"
+            onClick={() => onSelectCategory(activeOverflowCat.slug)}
+          >
+            <span>{activeOverflowCat.label.split(' & ')[0]}</span>
+            {activeOverflowCat.count !== undefined && activeOverflowCat.count > 0 && (
+              <span className="pill-count">{activeOverflowCat.count}</span>
+            )}
+          </button>
+        )}
+
+        {/* Show "More" toggle when overflow categories exist */}
         {overflowCategories.length > 0 && (
           <button
             type="button"
             className={`pill-btn pill-more ${isOpen ? 'active' : ''}`}
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => setIsOpen((prev) => !prev)}
+            aria-expanded={isOpen}
           >
             <SlidersHorizontal size={13} />
-            More
+            <span>More ({overflowCategories.length})</span>
             <ChevronDown size={12} className={isOpen ? 'chevron-flip' : ''} />
           </button>
         )}
       </div>
 
-      {/* Overflow dropdown */}
+      {/* Expandable category grid */}
       {overflowCategories.length > 0 && (
         <div className={`filter-pills-wrap ${isOpen ? 'open' : ''}`}>
           <div className="filter-pills">
@@ -62,10 +80,15 @@ export function CategoryScroll({ categories, activeCategory, onSelectCategory }:
                 key={cat.slug}
                 type="button"
                 className={`pill-btn ${activeCategory === cat.slug ? 'active' : ''}`}
-                onClick={() => { onSelectCategory(cat.slug); setIsOpen(false); }}
+                onClick={() => {
+                  onSelectCategory(cat.slug);
+                  setIsOpen(false);
+                }}
               >
-                {cat.label}
-                {cat.count !== undefined && cat.count > 0 && <span className="pill-count">{cat.count}</span>}
+                <span>{cat.label}</span>
+                {cat.count !== undefined && cat.count > 0 && (
+                  <span className="pill-count">{cat.count}</span>
+                )}
               </button>
             ))}
           </div>

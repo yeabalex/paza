@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { UserProfile, Interest, EventItem, User } from './types';
 import { fetchInterests, fetchUserProfile, updateUserInterests } from './api/users';
 import {
+  EXPLORE_PAGE_SIZE,
   fetchExploreEvents,
   fetchCategories,
   saveScrapedEvent,
@@ -11,8 +12,9 @@ import {
   type CategoryInfo,
 } from './api/events';
 
+import { TopNav } from './components/common/TopNav';
 import { BottomNav } from './components/common/BottomNav';
-import { AuthControls } from './components/auth/AuthControls';
+import { AuthGate } from './components/auth/AuthGate';
 import { useAppAuth } from './auth/authContext';
 import { CategoryScroll } from './components/events/CategoryScroll';
 import { SearchBar } from './components/events/SearchBar';
@@ -20,7 +22,7 @@ import { ExplorePostCard } from './components/events/ExplorePostCard';
 import { InterestSelector } from './components/onboarding/InterestSelector';
 import { EventDetail } from './components/events/EventDetail';
 import { TicketPassScreen } from './components/events/TicketPassScreen';
-import { Calendar, Bookmark, Ticket } from 'lucide-react';
+import { Calendar, Bookmark, Ticket, LayoutGrid, List, RotateCcw, ShieldAlert } from 'lucide-react';
 
 import './App.css';
 
@@ -56,8 +58,10 @@ export function App() {
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [viewState, setViewState] = useState<'loading' | 'onboarding' | 'feed'>('loading');
+  const [viewState, setViewState] = useState<'loading' | 'onboarding' | 'feed' | 'auth_error'>('loading');
+  const [authRetryTick, setAuthRetryTick] = useState(0);
   const [activeTab, setActiveTab] = useState<string>('home');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [events, setEvents] = useState<EventItem[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [joinedEvents, setJoinedEvents] = useState<Record<string, boolean>>({});
@@ -70,11 +74,10 @@ export function App() {
 
   const [timeframe, setTimeframe] = useState<'upcoming' | 'past'>('upcoming');
 
-  // Ref for infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!authLoaded) return;
+    if (!authLoaded || !isClerkEnabled || !isSignedIn || !clerkUser) return;
 
     const initApp = async () => {
       try {
@@ -85,19 +88,6 @@ export function App() {
 
         if (verifyEventId && ticketCodeParam) {
           setVerifyTicketParams({ eventId: verifyEventId, ticketCode: ticketCodeParam });
-        }
-
-        const fetchedInterests = await fetchInterests().catch(() => [] as Interest[]);
-        if (fetchedInterests && fetchedInterests.length > 0) {
-          setAvailableInterests(fetchedInterests);
-        }
-
-        // Unauthenticated visitors browse the public Explore feed directly
-        if (!isSignedIn || !clerkUser) {
-          setUser(null);
-          setCurrentUser(null);
-          setViewState('feed');
-          return;
         }
 
         const displayName = clerkUser.fullName || clerkUser.firstName || clerkUser.username || 'User';
@@ -115,11 +105,16 @@ export function App() {
         if (savedLocalSlugs.length > 0) {
           setSelectedSlugs(savedLocalSlugs);
         }
-        if (hasOnboardedLocally || savedLocalSlugs.length > 0) {
-          setViewState('feed');
+
+        const [fetchedInterests, profile] = await Promise.all([
+          fetchInterests().catch(() => [] as Interest[]),
+          fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null),
+        ]);
+
+        if (fetchedInterests && fetchedInterests.length > 0) {
+          setAvailableInterests(fetchedInterests);
         }
 
-        const profile = await fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null);
         if (profile) {
           setUser(profile);
           setCurrentUser({
@@ -141,25 +136,25 @@ export function App() {
           }
         } else {
           setUser(null);
-          setViewState('feed');
+          setCurrentUser(null);
+          setViewState('auth_error');
         }
       } catch (err) {
-        console.error('Error initializing app:', err);
-        setViewState('feed');
+        console.error('Error initializing authenticated session:', err);
+        setViewState('auth_error');
       }
     };
 
     initApp();
-  }, [authLoaded, isSignedIn, clerkUser]);
+  }, [authLoaded, isClerkEnabled, isSignedIn, clerkUser, authRetryTick]);
 
-  // Load first page when feed/category/activeTab changes
+  // Load first page when feed/category/activeTab changes (strictly requires signed-in session)
   useEffect(() => {
     const loadFirstPage = async () => {
       setIsLoadingEvents(true);
       setHasMore(true);
       setSelectedEvent(null);
 
-      // Fetch dynamic categories
       fetchCategories().then((cats) => {
         if (cats && cats.length > 0) {
           setCategories(cats);
@@ -167,7 +162,7 @@ export function App() {
       });
 
       if (activeTab === 'saved') {
-        if (!isSignedIn || !user?.telegram_id) {
+        if (!user?.telegram_id) {
           setEvents([]);
           setHasMore(false);
           setIsLoadingEvents(false);
@@ -177,7 +172,7 @@ export function App() {
         setEvents(savedEvts);
         setHasMore(false);
       } else if (activeTab === 'tickets') {
-        if (!isSignedIn || !user?.telegram_id) {
+        if (!user?.telegram_id) {
           setEvents([]);
           setHasMore(false);
           setIsLoadingEvents(false);
@@ -189,22 +184,21 @@ export function App() {
       } else {
         const initialEvents = await fetchExploreEvents(activeCategory, 0, timeframe);
         setEvents(initialEvents);
-        setHasMore(initialEvents.length >= 15);
+        setHasMore(initialEvents.length >= EXPLORE_PAGE_SIZE);
       }
       setIsLoadingEvents(false);
     };
 
-    if (viewState === 'feed') {
+    if (viewState === 'feed' && isClerkEnabled && isSignedIn && clerkUser && user) {
       loadFirstPage();
     }
-  }, [activeCategory, activeTab, timeframe, viewState, isSignedIn, user]);
+  }, [activeCategory, activeTab, timeframe, viewState, isClerkEnabled, isSignedIn, clerkUser, user]);
 
-  const loadNextPage = async () => {
+  const loadNextPage = useCallback(async () => {
     if (isLoadingMore || !hasMore || activeTab !== 'home') return;
     setIsLoadingMore(true);
-    const nextPage = Math.floor(events.length / 15);
-    const newEvents = await fetchExploreEvents(activeCategory, nextPage, timeframe);
-    if (newEvents.length < 15) {
+    const newEvents = await fetchExploreEvents(activeCategory, events.length, timeframe);
+    if (newEvents.length < EXPLORE_PAGE_SIZE) {
       setHasMore(false);
     }
     setEvents((prev) => {
@@ -213,15 +207,15 @@ export function App() {
       return [...prev, ...filtered];
     });
     setIsLoadingMore(false);
-  };
+  }, [isLoadingMore, hasMore, activeTab, activeCategory, events.length, timeframe]);
 
-  // Infinite scroll observer: trigger loadNextPage when sentinel is in view
+  // Infinite scroll observer
   useEffect(() => {
     if (activeTab !== 'home' || !hasMore || isLoadingMore || isLoadingEvents) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+        if (entries[0].isIntersecting) {
           loadNextPage();
         }
       },
@@ -234,7 +228,7 @@ export function App() {
     return () => {
       if (el) observer.unobserve(el);
     };
-  }, [hasMore, isLoadingMore, isLoadingEvents, activeTab, events.length, activeCategory, timeframe]);
+  }, [hasMore, isLoadingMore, isLoadingEvents, activeTab, loadNextPage]);
 
   const toggleInterest = (slug: string) => {
     setSelectedSlugs((prev) =>
@@ -274,7 +268,6 @@ export function App() {
     setJoinedEvents((prev) => {
       const isJoined = !prev[eventId];
 
-      // Persist to PostgreSQL database
       if (targetEvent) {
         if (isJoined) {
           saveScrapedEvent(userId, targetEvent);
@@ -287,12 +280,50 @@ export function App() {
     });
   };
 
+  const handleSelectTab = (tab: string) => {
+    setSelectedEvent(null);
+    setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBrandClick = () => {
+    setSelectedEvent(null);
+    setActiveTab('home');
+    setSearchQuery('');
+    setActiveCategory('all');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredEvents = events.filter((ev) => {
-    const matchesSearch =
-      ev.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ev.venue_name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
+    if (!normalizedQuery) return true;
+    return (
+      ev.title.toLowerCase().includes(normalizedQuery) ||
+      (ev.venue_name || '').toLowerCase().includes(normalizedQuery) ||
+      (ev.sub_city || '').toLowerCase().includes(normalizedQuery) ||
+      (ev.category || '').toLowerCase().includes(normalizedQuery) ||
+      (ev.description || '').toLowerCase().includes(normalizedQuery)
+    );
   });
+
+  // Enforce authentication across ALL pages before any view renders
+  if (!authLoaded) {
+    return (
+      <div className="loading-screen">
+        <img src="/logo.png" alt="PAZA Events" className="loading-logo" />
+        <div className="loading-wordmark">PAZA EVENTS</div>
+        <div className="loading-dots">
+          <div className="dot-loader" />
+          <div className="dot-loader" style={{ animationDelay: '0.15s' }} />
+          <div className="dot-loader" style={{ animationDelay: '0.3s' }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isClerkEnabled || !isSignedIn || !clerkUser) {
+    return <AuthGate isClerkEnabled={isClerkEnabled} />;
+  }
 
   if (verifyTicketParams) {
     return (
@@ -306,36 +337,10 @@ export function App() {
 
   if (viewState === 'loading') {
     return (
-      <div
-        className="app-container"
-        style={{
-          display: 'flex',
-          minHeight: '100vh',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: '16px',
-          padding: '40px 20px',
-          textAlign: 'center',
-        }}
-      >
-        <img
-          src="/logo.png"
-          alt="PAZA Events"
-          style={{
-            width: '120px',
-            height: '120px',
-            objectFit: 'contain',
-            background: 'transparent',
-            filter: 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.35))',
-          }}
-        />
-        <div>
-          <h1 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
-            PAZA EVENTS
-          </h1>
-        </div>
-        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+      <div className="loading-screen">
+        <img src="/logo.png" alt="PAZA Events" className="loading-logo" />
+        <div className="loading-wordmark">PAZA EVENTS</div>
+        <div className="loading-dots">
           <div className="dot-loader" />
           <div className="dot-loader" style={{ animationDelay: '0.15s' }} />
           <div className="dot-loader" style={{ animationDelay: '0.3s' }} />
@@ -344,7 +349,41 @@ export function App() {
     );
   }
 
+  if (viewState === 'auth_error') {
+    return (
+      <div className="app-shell">
+        <TopNav activeTab={activeTab} onSelectTab={handleSelectTab} onBrandClick={handleBrandClick} />
+        <div className="auth-error-shell">
+          <div className="empty-state-card">
+            <div className="empty-state-icon">
+              <ShieldAlert size={28} />
+            </div>
+            <h3>Session Verification Failed</h3>
+            <p>
+              We couldn&apos;t verify your session with the PAZA backend server. Ensure the backend
+              is running with matching Clerk keys and try again.
+            </p>
+            <button
+              type="button"
+              className="empty-primary-btn"
+              onClick={() => {
+                setViewState('loading');
+                setAuthRetryTick((n) => n + 1);
+              }}
+            >
+              <RotateCcw size={14} />
+              <span>Retry Verification</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (viewState === 'onboarding') {
+    const canCancel = Boolean(
+      clerkUser && localStorage.getItem(`onboarding_completed_${clerkUser.id}`) === 'true'
+    );
     return (
       <InterestSelector
         interests={availableInterests}
@@ -353,193 +392,281 @@ export function App() {
         onSelectAll={handleSelectAllInterests}
         onClearAll={handleClearAllInterests}
         onSave={handleSaveInterests}
+        onCancel={canCancel ? () => setViewState('feed') : undefined}
       />
     );
   }
 
-  if (selectedEvent) {
-    return (
-      <EventDetail
-        event={selectedEvent}
-        isJoined={!!joinedEvents[selectedEvent.id]}
-        onBack={() => setSelectedEvent(null)}
-        onToggleJoin={toggleJoin}
-        user={currentUser}
-      />
-    );
-  }
+  const hasActiveFilters = activeTab === 'home' && (activeCategory !== 'all' || searchQuery.trim().length > 0);
 
   return (
-    <div className="app-container">
-      {/* ── Conditional Header: Tickets (RSVPs) vs Saved vs Feed ── */}
-      {activeTab === 'tickets' ? (
-        <div style={{ padding: '16px 20px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Your RSVPs</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} joined</span>
-            <AuthControls />
-          </div>
-        </div>
-      ) : activeTab === 'saved' ? (
-        <div style={{ padding: '16px 20px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Saved Events</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} saved</span>
-            <AuthControls />
-          </div>
-        </div>
+    <div className="app-shell">
+      <TopNav
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        onBrandClick={handleBrandClick}
+        showInterestsBtn={Boolean(isSignedIn)}
+        onOpenInterests={() => setViewState('onboarding')}
+      />
+
+      {selectedEvent ? (
+        <EventDetail
+          event={selectedEvent}
+          isJoined={!!joinedEvents[selectedEvent.id]}
+          onBack={() => setSelectedEvent(null)}
+          onToggleJoin={toggleJoin}
+          user={currentUser}
+        />
       ) : (
-        <>
-          <div style={{ padding: '16px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', margin: 0 }}>
-              {timeframe === 'past' ? 'Past Events' : 'Explore Events'}
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: '20px', padding: '3px', gap: '2px' }}>
+        <div className="page-shell">
+          {/* ── Page Header / Discovery Banner ── */}
+          {activeTab === 'tickets' ? (
+            <section className="page-header-block">
+              <div>
+                <div className="discovery-kicker">Your Passes</div>
+                <h1 className="page-hero-title">My RSVPs</h1>
+                <p className="page-hero-subtitle">Events you have confirmed attendance or uploaded tickets for.</p>
+              </div>
+              <div className="header-stat-pill">
+                <span>{events.length} {events.length === 1 ? 'RSVP' : 'RSVPs'}</span>
+              </div>
+            </section>
+          ) : activeTab === 'saved' ? (
+            <section className="page-header-block">
+              <div>
+                <div className="discovery-kicker">Bookmarks</div>
+                <h1 className="page-hero-title">Saved Events</h1>
+                <p className="page-hero-subtitle">Shortlisted events saved across your sessions.</p>
+              </div>
+              <div className="header-stat-pill">
+                <span>{events.length} saved</span>
+              </div>
+            </section>
+          ) : (
+            <section className="page-header-block">
+              <div>
+                <div className="discovery-kicker">
+                  <span className="kicker-dot" />
+                  <span>Addis Ababa · Event Discovery</span>
+                </div>
+                <h1 className="page-hero-title">
+                  {timeframe === 'past' ? 'Past Events' : 'Explore Events'}
+                </h1>
+                <p className="page-hero-subtitle">
+                  Concerts, tech meetups, art exhibitions &amp; nightlife happening across Addis Ababa.
+                </p>
+              </div>
+
+              <div className="timeframe-switch" role="group" aria-label="Event timeframe">
                 <button
                   type="button"
+                  className={`timeframe-btn ${timeframe === 'upcoming' ? 'active' : ''}`}
                   onClick={() => setTimeframe('upcoming')}
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: '16px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: timeframe === 'upcoming' ? 'var(--accent)' : 'transparent',
-                    color: timeframe === 'upcoming' ? '#fff' : 'var(--text-muted)',
-                    transition: 'all 0.2s ease',
-                  }}
+                  aria-pressed={timeframe === 'upcoming'}
                 >
                   Upcoming
                 </button>
                 <button
                   type="button"
+                  className={`timeframe-btn ${timeframe === 'past' ? 'active' : ''}`}
                   onClick={() => setTimeframe('past')}
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: '16px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: timeframe === 'past' ? 'var(--accent)' : 'transparent',
-                    color: timeframe === 'past' ? '#fff' : 'var(--text-muted)',
-                    transition: 'all 0.2s ease',
-                  }}
+                  aria-pressed={timeframe === 'past'}
                 >
                   Past
                 </button>
               </div>
-              <AuthControls />
-            </div>
-          </div>
+            </section>
+          )}
 
-          {/* ── Category Scroll Filter Pills (Dynamic categories from Redis) ── */}
-          <CategoryScroll
-            categories={categories}
-            activeCategory={activeCategory}
-            onSelectCategory={setActiveCategory}
-          />
-        </>
-      )}
+          {/* ── Filter & Search Toolbar ── */}
+          <section className="discovery-controls">
+            <div className="controls-top-row">
+              <SearchBar value={searchQuery} onChange={setSearchQuery} />
 
-      {/* ── Search Bar ── */}
-      <SearchBar value={searchQuery} onChange={setSearchQuery} />
+              <div className="controls-right-tools">
+                {!isLoadingEvents && (
+                  <span className="results-counter">
+                    {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}
+                  </span>
+                )}
 
-      {/* ── Section Title ── */}
-      <h2 className="section-title">
-        {activeTab === 'tickets' ? 'My Confirmed Events' : activeTab === 'saved' ? 'Your Bookmarks' : 'Events'}
-      </h2>
-
-      {/* ── Event Feed ── */}
-      <main className="event-feed">
-        {isLoadingEvents ? (
-          <div className="skeleton-feed">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="skeleton-card">
-                <div className="skeleton-avatar" style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)' }} />
-                <div className="skeleton-lines" style={{ flex: 1 }}>
-                  <div className="skeleton-line w-75" />
-                  <div className="skeleton-line w-40" />
+                <div className="view-mode-toggle" role="group" aria-label="Layout view">
+                  <button
+                    type="button"
+                    className={`view-mode-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                    onClick={() => setViewMode('grid')}
+                    title="Card grid view"
+                    aria-label="Card grid view"
+                  >
+                    <LayoutGrid size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`view-mode-btn ${viewMode === 'list' ? 'active' : ''}`}
+                    onClick={() => setViewMode('list')}
+                    title="Compact agenda list"
+                    aria-label="Compact agenda list"
+                  >
+                    <List size={15} />
+                  </button>
                 </div>
-                <div className="skeleton-btn" />
               </div>
-            ))}
-          </div>
-        ) : filteredEvents.length === 0 ? (
-          activeTab === 'tickets' ? (
-            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
-              <Ticket size={40} style={{ margin: '0 auto 12px', opacity: 0.4, color: 'var(--accent)' }} />
-              {isClerkEnabled && !isSignedIn ? (
-                <>
-                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>Sign in to view your RSVPs</p>
-                  <p style={{ fontSize: '13px', marginBottom: '14px' }}>Your event tickets and RSVPs are synced to your account.</p>
-                  <button type="button" onClick={openSignIn} style={{ padding: '8px 18px', borderRadius: '20px', border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>Sign In</button>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>No RSVP'd events yet</p>
-                  <p style={{ fontSize: '13px' }}>Tap "Going" on any event to register your RSVP here.</p>
-                </>
-              )}
             </div>
-          ) : activeTab === 'saved' ? (
-            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
-              <Bookmark size={40} style={{ margin: '0 auto 12px', opacity: 0.4, color: 'var(--accent)' }} />
-              {isClerkEnabled && !isSignedIn ? (
-                <>
-                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>Sign in to view saved events</p>
-                  <p style={{ fontSize: '13px', marginBottom: '14px' }}>Bookmark events and access them across devices.</p>
-                  <button type="button" onClick={openSignIn} style={{ padding: '8px 18px', borderRadius: '20px', border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>Sign In</button>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>No saved events yet</p>
-                  <p style={{ fontSize: '13px' }}>Tap the bookmark icon on any event to save it here.</p>
-                </>
-              )}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-muted)' }}>
-              <Calendar size={36} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-              <p style={{ fontSize: '14px' }}>No events found{activeCategory !== 'all' ? ' for this category' : ''}.</p>
-            </div>
-          )
-        ) : (
-          filteredEvents.map((ev) => (
-            <ExplorePostCard
-              key={ev.id}
-              event={ev}
-              isJoined={activeTab === 'saved' || activeTab === 'tickets' ? true : !!joinedEvents[ev.id]}
-              onToggleJoin={toggleJoin}
-              onClick={() => setSelectedEvent(ev)}
-            />
-          ))
-        )}
 
-        {/* Infinite scroll sentinel */}
-        {!isLoadingEvents && hasMore && activeTab === 'home' && (
-          <div ref={sentinelRef} style={{ padding: '20px', textAlign: 'center' }}>
-            {isLoadingMore && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
-                <div className="dot-loader" />
-                <div className="dot-loader" style={{ animationDelay: '0.15s' }} />
-                <div className="dot-loader" style={{ animationDelay: '0.3s' }} />
+            {activeTab === 'home' && (
+              <CategoryScroll
+                categories={categories}
+                activeCategory={activeCategory}
+                onSelectCategory={setActiveCategory}
+              />
+            )}
+          </section>
+
+          {/* ── Event Feed Content ── */}
+          <main className="feed-workspace">
+            {isLoadingEvents ? (
+              viewMode === 'grid' ? (
+                <div className="skeleton-feed">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="skeleton-card-box">
+                      <div className="skeleton-poster" />
+                      <div className="skeleton-card-body">
+                        <div className="skeleton-line w-40" />
+                        <div className="skeleton-line lg w-85" />
+                        <div className="skeleton-line w-60" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="event-feed-list">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="skeleton-card">
+                      <div className="skeleton-avatar" />
+                      <div className="skeleton-lines">
+                        <div className="skeleton-line w-85" />
+                        <div className="skeleton-line w-40" />
+                      </div>
+                      <div className="skeleton-btn" />
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : filteredEvents.length === 0 ? (
+              <div className="empty-state-card">
+                {activeTab === 'tickets' ? (
+                  <>
+                    <div className="empty-state-icon">
+                      <Ticket size={28} />
+                    </div>
+                    {isClerkEnabled && !isSignedIn ? (
+                      <>
+                        <h3>Sign in to view your RSVPs</h3>
+                        <p>Your event tickets, payment receipts, and door verification codes stay synced to your account.</p>
+                        <button type="button" className="empty-primary-btn" onClick={openSignIn}>
+                          Sign In
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <h3>No RSVP'd events yet</h3>
+                        <p>Open any event and tap "I'm Going" to keep track of your upcoming plans here.</p>
+                        <button type="button" className="empty-secondary-btn" onClick={() => handleSelectTab('home')}>
+                          Browse Events
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : activeTab === 'saved' ? (
+                  <>
+                    <div className="empty-state-icon">
+                      <Bookmark size={28} />
+                    </div>
+                    {isClerkEnabled && !isSignedIn ? (
+                      <>
+                        <h3>Sign in to view saved events</h3>
+                        <p>Bookmark concerts, workshops, and meetups so you never lose track of them.</p>
+                        <button type="button" className="empty-primary-btn" onClick={openSignIn}>
+                          Sign In
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <h3>No saved events yet</h3>
+                        <p>Click the bookmark button on any event card to save it to your shortlist.</p>
+                        <button type="button" className="empty-secondary-btn" onClick={() => handleSelectTab('home')}>
+                          Explore Events
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="empty-state-icon">
+                      <Calendar size={28} />
+                    </div>
+                    <h3>No matching events found</h3>
+                    <p>
+                      {hasActiveFilters
+                        ? 'Try clearing your category filter or adjusting your search keywords.'
+                        : 'Check back soon for new Addis Ababa events.'}
+                    </p>
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        className="empty-secondary-btn"
+                        onClick={() => {
+                          setActiveCategory('all');
+                          setSearchQuery('');
+                        }}
+                      >
+                        <RotateCcw size={14} />
+                        <span>Reset Filters</span>
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className={viewMode === 'grid' ? 'event-feed-grid' : 'event-feed-list'}>
+                {filteredEvents.map((ev) => (
+                  <ExplorePostCard
+                    key={ev.id}
+                    event={ev}
+                    viewMode={viewMode}
+                    isJoined={activeTab === 'saved' || activeTab === 'tickets' ? true : !!joinedEvents[ev.id]}
+                    onToggleJoin={toggleJoin}
+                    onClick={() => setSelectedEvent(ev)}
+                  />
+                ))}
               </div>
             )}
-          </div>
-        )}
 
-        {!isLoadingEvents && !hasMore && events.length > 0 && (
-          <div style={{ textAlign: 'center', padding: '16px 20px', color: 'var(--text-muted)', fontSize: '12px' }}>
-            You've seen all events
-          </div>
-        )}
-      </main>
+            {/* Infinite scroll sentinel & explicit load-more button */}
+            {!isLoadingEvents && hasMore && activeTab === 'home' && (
+              <div ref={sentinelRef} className="feed-pagination-footer">
+                {isLoadingMore ? (
+                  <div className="loading-dots">
+                    <div className="dot-loader" />
+                    <div className="dot-loader" style={{ animationDelay: '0.15s' }} />
+                    <div className="dot-loader" style={{ animationDelay: '0.3s' }} />
+                  </div>
+                ) : (
+                  <button type="button" className="load-more-btn" onClick={loadNextPage}>
+                    Load more events
+                  </button>
+                )}
+              </div>
+            )}
 
-      {/* ── Bottom Navigation ── */}
-      <BottomNav activeTab={activeTab} onSelectTab={setActiveTab} />
+            {!isLoadingEvents && !hasMore && events.length > 0 && (
+              <div className="feed-end-note">You've reached the end of the list</div>
+            )}
+          </main>
+        </div>
+      )}
+
+      {!selectedEvent && <BottomNav activeTab={activeTab} onSelectTab={handleSelectTab} />}
     </div>
   );
 }

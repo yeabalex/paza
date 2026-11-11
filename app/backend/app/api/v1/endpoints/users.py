@@ -52,14 +52,7 @@ async def _resolve_or_provision_web_user(
             preferred_language="en",
         )
 
-    target_id: int
-    if telegram_id:
-        target_id = telegram_id
-    elif user_id:
-        target_id = deterministic_numeric_id(user_id)
-    else:
-        target_id = current_user.get("user_id", 999888777)
-
+    target_id = int(current_user["user_id"])
     sync_full_name = full_name or current_user.get("full_name") or "Web User"
     sync_username = username or current_user.get("username")
     return await UserRepository.get_or_create_user(
@@ -76,7 +69,7 @@ async def _resolve_or_provision_web_user(
     "/me",
     response_model=UserProfileSchema,
     summary="Get Current User Profile & Registration Status",
-    description="Fetches or auto-provisions a user profile in PostgreSQL for the Web App (Clerk or guest fallback)."
+    description="Verifies Bearer JWT identity, provisions/syncs user in PostgreSQL, and returns profile."
 )
 async def get_current_user_profile(
     user_id: Optional[str] = Query(None, description="Web User identifier (legacy fallback)"),
@@ -117,7 +110,8 @@ async def get_current_user_profile(
     "/interests",
     response_model=List[InterestSchema],
     summary="List All Available Normalized Interests",
-    description="Returns all normalized categories/interests for selection."
+    description="Returns all normalized categories/interests for selection. Requires Bearer token.",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_all_interests(db: AsyncSession = Depends(get_db)):
     """Returns list of all normalized interests."""

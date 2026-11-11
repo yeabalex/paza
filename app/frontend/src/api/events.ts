@@ -7,14 +7,7 @@ export interface CategoryInfo {
   count?: number;
 }
 
-const PAGE_SIZE = 7;
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   10-MINUTE CLIENT-SIDE CACHE IMPLEMENTATION
-   ---------------------------------------------------------------------------
-   REMINDER: Uncomment the caching logic below in production to cache fetched
-   events for 10 minutes and minimize backend & network overhead.
-   ═══════════════════════════════════════════════════════════════════════════ */
+export const EXPLORE_PAGE_SIZE = 12;
 
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -65,7 +58,7 @@ export async function fetchExploreEvents(category?: string, skip = 0, timeframe:
   if (category && category !== 'all') params.set('category', category);
   params.set('timeframe', timeframe);
   params.set('skip', skip.toString());
-  params.set('limit', PAGE_SIZE.toString());
+  params.set('limit', EXPLORE_PAGE_SIZE.toString());
   const query = params.toString() ? `?${params.toString()}` : '';
   const cacheKey = `explore_${category || 'all'}_${timeframe}_${skip}`;
 

@@ -35,22 +35,34 @@ export function InviteCustomizerModal({
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
+  const handleSearchChange = (nextQuery: string) => {
+    setSearchQuery(nextQuery);
+    if (!nextQuery.trim()) {
       setSearchResults([]);
       setIsSearching(false);
-      return;
+    } else {
+      setIsSearching(true);
     }
+  };
 
-    setIsSearching(true);
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+
+    let active = true;
     const timer = setTimeout(() => {
-      searchUsers(searchQuery).then((results) => {
-        setSearchResults(results);
-        setIsSearching(false);
+      searchUsers(trimmed).then((results) => {
+        if (active) {
+          setSearchResults(results);
+          setIsSearching(false);
+        }
       });
     }, 300);
 
-    return () => clearTimeout(timer);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [searchQuery]);
 
   const activeInviter: User = activeUser || {
@@ -59,10 +71,11 @@ export function InviteCustomizerModal({
     username: 'you',
   };
 
-  const handleSelectUser = (user: UserSearchResult) => {
-    setSelectedInvitee(user);
+  const handleSelectUser = (pickedUser: UserSearchResult) => {
+    setSelectedInvitee(pickedUser);
     setSearchQuery('');
     setSearchResults([]);
+    setIsSearching(false);
   };
 
   const handleClearInvitee = () => {
@@ -70,19 +83,19 @@ export function InviteCustomizerModal({
     setVibe('casual');
   };
 
-  const shareLink = typeof window !== 'undefined'
-    ? `${window.location.origin}/?event_id=${encodeURIComponent(event.id)}${
-        selectedInvitee ? `&invited_by=${activeInviter.id}` : ''
-      }`
-    : '';
+  const shareLink =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/?event_id=${encodeURIComponent(event.id)}${
+          selectedInvitee ? `&invited_by=${activeInviter.id}` : ''
+        }`
+      : '';
 
   const handleDownloadImage = () => {
     if (!canvasElement) return;
     const link = document.createElement('a');
     link.download = `invite_${event.title.replace(/\s+/g, '_')}.png`;
-    // If canvas element is HTML, use canvas render or fallback
     if ('toDataURL' in canvasElement) {
-      link.href = (canvasElement as HTMLCanvasElement).toDataURL('image/png');
+      link.href = canvasElement.toDataURL('image/png');
       link.click();
     }
   };
@@ -99,10 +112,9 @@ export function InviteCustomizerModal({
         });
         return;
       } catch {
-        // User cancelled or share failed
+        // User cancelled or share unavailable
       }
     }
-    // Fallback: Copy link
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(shareLink);
       setCopiedLink(true);
@@ -123,124 +135,138 @@ export function InviteCustomizerModal({
       <div className="invite-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="invite-modal-header">
-          <h3>Create Invite Artwork</h3>
-          <button type="button" className="invite-modal-close" onClick={onClose}>
+          <div>
+            <h3>Create Invite Artwork</h3>
+            <p className="invite-modal-sub">Customize and download or share an event pass card</p>
+          </div>
+          <button type="button" className="invite-modal-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
-        {/* Content Body */}
+        {/* Body (stacks on mobile, 2-col on desktop) */}
         <div className="invite-modal-body">
-          {/* Live Canvas Preview */}
-          <div className="invite-canvas-wrapper">
-            <InviteCardHTML
-              event={event}
-              inviter={activeInviter}
-              invitee={selectedInvitee}
-              vibe={vibe}
-              onCanvasReady={(canvas) => setCanvasElement(canvas)}
-            />
-          </div>
-
-          {/* User Search Input */}
-          <div className="invite-control-group">
-            <label className="invite-control-label">Invite Someone Specific (Optional)</label>
-            {selectedInvitee ? (
-              <div className="selected-invitee-chip">
-                <span>{selectedInvitee.full_name || selectedInvitee.username}</span>
-                <button type="button" onClick={handleClearInvitee}>
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
-              <div className="invite-search-box">
-                <Search size={16} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search user name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="invite-search-input"
-                />
-              </div>
-            )}
-
-            {/* Search Dropdown */}
-            {searchResults.length > 0 && (
-              <div className="invite-search-results">
-                {searchResults.map((user) => (
-                  <div
-                    key={user.telegram_id}
-                    className="invite-search-item"
-                    onClick={() => handleSelectUser(user)}
-                  >
-                    <div className="avatar-placeholder">
-                      {(user.full_name || user.username || 'U')[0].toUpperCase()}
-                    </div>
-                    <div className="user-info">
-                      <span className="user-name">{user.full_name || user.username}</span>
-                      {user.username && <span className="user-handle">@{user.username}</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {isSearching && <div className="searching-hint">Searching users...</div>}
-          </div>
-
-          {/* Vibe Selector */}
-          {selectedInvitee && (
-            <div className="invite-control-group">
-              <label className="invite-control-label">Card Theme & Vibe</label>
-              <div className="vibe-chips">
-                <button
-                  type="button"
-                  className={`vibe-chip ${vibe === 'date' ? 'active date' : ''}`}
-                  onClick={() => setVibe('date')}
-                >
-                  <Heart size={14} /> Date 💖
-                </button>
-                <button
-                  type="button"
-                  className={`vibe-chip ${vibe === 'hangout' ? 'active hangout' : ''}`}
-                  onClick={() => setVibe('hangout')}
-                >
-                  <Beer size={14} /> Hangout 🍻
-                </button>
-                <button
-                  type="button"
-                  className={`vibe-chip ${vibe === 'casual' ? 'active casual' : ''}`}
-                  onClick={() => setVibe('casual')}
-                >
-                  <Sparkles size={14} /> Casual ✨
-                </button>
-              </div>
+          {/* Left: Live Canvas Preview */}
+          <div className="invite-preview-pane">
+            <div className="invite-canvas-wrapper">
+              <InviteCardHTML
+                event={event}
+                inviter={activeInviter}
+                invitee={selectedInvitee}
+                vibe={vibe}
+                onCanvasReady={(canvas) => setCanvasElement(canvas)}
+              />
             </div>
-          )}
+          </div>
 
-          {copiedLink && (
-            <div className="invite-toast">Invite link copied to clipboard!</div>
-          )}
+          {/* Right: Controls */}
+          <div className="invite-controls-pane">
+            <div className="invite-control-group">
+              <label className="invite-control-label">Invite Someone Specific (Optional)</label>
+              {selectedInvitee ? (
+                <div className="selected-invitee-chip">
+                  <div className="selected-invitee-avatar">
+                    {(selectedInvitee.full_name || selectedInvitee.username || 'U')[0].toUpperCase()}
+                  </div>
+                  <div className="selected-invitee-info">
+                    <span className="selected-invitee-name">
+                      {selectedInvitee.full_name || selectedInvitee.username}
+                    </span>
+                    {selectedInvitee.username && (
+                      <span className="selected-invitee-handle">@{selectedInvitee.username}</span>
+                    )}
+                  </div>
+                  <button type="button" className="remove-invitee-btn" onClick={handleClearInvitee}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="invite-search-box">
+                  <Search size={16} className="search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search user name..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="invite-search-input"
+                  />
+                  {searchResults.length > 0 && (
+                    <div className="invite-search-results">
+                      {searchResults.map((found) => (
+                        <div
+                          key={found.telegram_id}
+                          className="invite-search-result-item"
+                          onClick={() => handleSelectUser(found)}
+                        >
+                          <div className="result-avatar">
+                            {(found.full_name || found.username || 'U')[0].toUpperCase()}
+                          </div>
+                          <div className="result-info">
+                            <span className="result-name">{found.full_name || found.username}</span>
+                            {found.username && <span className="result-handle">@{found.username}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {isSearching && <div className="searching-hint">Searching users...</div>}
+            </div>
+
+            {selectedInvitee && (
+              <div className="invite-control-group">
+                <label className="invite-control-label">Card Theme & Vibe</label>
+                <div className="vibe-selector-row">
+                  <button
+                    type="button"
+                    className={`vibe-chip ${vibe === 'date' ? 'active date' : ''}`}
+                    onClick={() => setVibe('date')}
+                  >
+                    <Heart size={14} /> Date
+                  </button>
+                  <button
+                    type="button"
+                    className={`vibe-chip ${vibe === 'hangout' ? 'active hangout' : ''}`}
+                    onClick={() => setVibe('hangout')}
+                  >
+                    <Beer size={14} /> Hangout
+                  </button>
+                  <button
+                    type="button"
+                    className={`vibe-chip ${vibe === 'casual' ? 'active casual' : ''}`}
+                    onClick={() => setVibe('casual')}
+                  >
+                    <Sparkles size={14} /> Casual
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {copiedLink && <div className="invite-toast">Invite link copied to clipboard!</div>}
+          </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="invite-modal-footer" style={{ flexDirection: 'column', gap: '8px' }}>
+        <div className="invite-modal-footer">
           <button
             type="button"
             className="invite-action-btn primary"
-            style={{ width: '100%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
             onClick={handleShare}
           >
-            <Share2 size={16} /> Share Event Invite
+            <Share2 size={16} />
+            <span>Share Event Invite</span>
           </button>
 
-          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-            <button type="button" className="invite-action-btn secondary" style={{ flex: 1 }} onClick={handleDownloadImage}>
-              <Download size={16} /> Save Image
+          <div className="invite-footer-secondary">
+            <button type="button" className="invite-action-btn secondary" onClick={handleDownloadImage}>
+              <Download size={16} />
+              <span>Save Image</span>
             </button>
 
-            <button type="button" className="invite-action-btn secondary" style={{ flex: 1 }} onClick={handleCopyLinkOnly}>
-              <LinkIcon size={16} /> Copy Link
+            <button type="button" className="invite-action-btn secondary" onClick={handleCopyLinkOnly}>
+              <LinkIcon size={16} />
+              <span>Copy Link</span>
             </button>
           </div>
         </div>

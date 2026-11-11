@@ -28,13 +28,14 @@ redis_event_storage = RedisEventStorage()
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# PUBLIC READ ENDPOINTS (no auth required)
+# AUTHENTICATED USER READ ENDPOINTS (Clerk / Bearer JWT required)
 # ════════════════════════════════════════════════════════════════════════════════
 
 @router.get(
     "/categories",
     response_model=List[CategoryInfo],
     summary="List available event categories with counts",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_event_categories():
     """Returns categories that have at least one active event, sorted by count."""
@@ -49,7 +50,8 @@ async def list_event_categories():
     "/explore",
     response_model=List[EventResponseSchema],
     summary="List Scraped Social Media Events (Explore Tab)",
-    description="Fetches scraped Instagram/TikTok/Telegram events directly from Redis cache. Filter by timeframe ('upcoming', 'past', or 'all')."
+    description="Fetches scraped Instagram/TikTok/Telegram events directly from Redis cache. Filter by timeframe ('upcoming', 'past', or 'all').",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_explore_scraped_events(
     category: Optional[str] = Query(None, description="Filter events by category slug"),
@@ -78,7 +80,8 @@ async def list_explore_scraped_events(
     "/past",
     response_model=List[EventResponseSchema],
     summary="List Past/Concluded Social Media Events",
-    description="Convenience endpoint returning past scraped events from Redis cache."
+    description="Convenience endpoint returning past scraped events from Redis cache.",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_past_scraped_events(
     category: Optional[str] = Query(None, description="Filter events by category slug"),
@@ -106,7 +109,8 @@ async def list_past_scraped_events(
     "/for-you",
     response_model=List[EventResponseSchema],
     summary="List Platform Organizer Events (For You Tab)",
-    description="Fetches verified organizer-posted events from PostgreSQL filtered by user interests."
+    description="Fetches verified organizer-posted events from PostgreSQL filtered by user interests.",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_for_you_organizer_events(
     telegram_id: Optional[int] = Query(None, description="Telegram user ID"),
@@ -128,7 +132,8 @@ async def list_for_you_organizer_events(
     "",
     response_model=List[EventResponseSchema],
     summary="List All Active Events",
-    description="Combines scraped events from Redis and platform events from PostgreSQL."
+    description="Combines scraped events from Redis and platform events from PostgreSQL.",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_all_active_events(
     category: Optional[str] = Query(None, description="Filter by category slug"),
@@ -144,7 +149,8 @@ async def list_all_active_events(
     "/detail/{event_id:path}",
     response_model=EventDetailSchema,
     summary="Get Full Event Details",
-    description="Fetches full details including description and images for a specific event ID."
+    description="Fetches full details including description and images for a specific event ID.",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def get_event_detail(
     event_id: str,
@@ -163,7 +169,8 @@ async def get_event_detail(
     "/verify-ticket",
     response_model=dict,
     summary="Verify Digital Entry Ticket Pass",
-    description="Validates a ticket by event_id and ticket_code for door authentication."
+    description="Validates a ticket by event_id and ticket_code for door authentication.",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def verify_ticket(
     event_id: str = Query(...),
@@ -189,6 +196,7 @@ async def verify_ticket(
     "/rsvp",
     response_model=List[RsvpUserSchema],
     summary="List all RSVPs for an event",
+    dependencies=[Depends(get_current_web_user)],
 )
 async def list_rsvps(
     event_id: str = Query(...),
@@ -208,11 +216,9 @@ async def list_rsvps(
 # USER-ACTION ENDPOINTS (Web User)
 # ════════════════════════════════════════════════════════════════════════════════
 
-def _resolve_target_user_id(current_user: dict, requested_telegram_id: Optional[int] = None) -> int:
-    """Enforce verified Clerk user ID when authenticated via Clerk, else allow legacy fallback."""
-    if current_user.get("auth_provider") == "clerk":
-        return int(current_user["user_id"])
-    return requested_telegram_id or int(current_user.get("user_id", 999888777))
+def _resolve_target_user_id(current_user: dict, _requested_telegram_id: Optional[int] = None) -> int:
+    """Always derive numeric user ID from verified JWT claims (preventing client ID spoofing)."""
+    return int(current_user["user_id"])
 
 
 @router.post(
@@ -375,6 +381,11 @@ async def upload_rsvp_receipt(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_web_user),
 ):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file must be an image (JPEG, PNG, WebP).",
+        )
     try:
         url = await s3_storage_service.upload_file(file=file, folder="rsvps/receipts")
         return {"url": url}
@@ -438,14 +449,6 @@ async def send_event_invite(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate invite: {str(e)}"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error sending event invite: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send invite: {str(e)}"
         )
 
 

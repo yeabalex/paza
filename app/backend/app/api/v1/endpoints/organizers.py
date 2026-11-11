@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clerk import clerk_verifier
+from app.core.config import settings
 from app.core.security import create_access_token, resolve_bearer_user
 from app.db.session import get_db
 from app.db.models import Interest
@@ -144,6 +145,12 @@ async def auth_with_email(
             detail=str(ve)
         )
 
+    if not settings.JWT_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Organizer email/password JWT authentication is not configured."
+        )
+
     organizer = await OrganizerRepository.get_organizer_by_user_id(db, user.id)
     token = create_access_token(user_id=str(user.id), email=user.email, role=user.role.value)
 
@@ -165,26 +172,34 @@ async def auth_with_google(
     req: OrganizerGoogleAuthRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Authenticate or register organizer via Google OAuth."""
-    target_google_id = req.google_id
-    target_email = req.email
-    target_name = req.full_name
+    """Authenticate or register organizer via verified Google OAuth ID token."""
+    if not settings.JWT_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Organizer Google JWT authentication is not configured."
+        )
 
-    if req.id_token:
-        google_info = await verify_google_id_token(req.id_token)
-        if not google_info:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Google OAuth ID token signature."
-            )
-        target_google_id = google_info.get("sub")
-        target_email = google_info.get("email")
-        target_name = google_info.get("name") or target_name
+    if not req.id_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Verified Google OAuth id_token is required."
+        )
+
+    google_info = await verify_google_id_token(req.id_token)
+    if not google_info:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google OAuth ID token signature."
+        )
+
+    target_google_id = google_info.get("sub")
+    target_email = google_info.get("email")
+    target_name = google_info.get("name") or req.full_name
 
     if not target_google_id or not target_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing valid Google credentials or ID token."
+            detail="Missing valid Google credentials in ID token."
         )
 
     user = await OrganizerRepository.authenticate_or_register_google(
@@ -193,6 +208,12 @@ async def auth_with_google(
         email=target_email,
         full_name=target_name
     )
+
+    if not settings.JWT_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Organizer email/password JWT authentication is not configured."
+        )
 
     organizer = await OrganizerRepository.get_organizer_by_user_id(db, user.id)
     token = create_access_token(user_id=str(user.id), email=user.email, role=user.role.value)
@@ -209,27 +230,19 @@ async def auth_with_google(
     "/me",
     response_model=OrganizerSessionResponse,
     summary="Get Current Organizer Session & Registration Status",
-    description="Verifies the current session token and returns the user's registered organizer profile if present."
+    description="Verifies the Bearer session token and returns the user's registered organizer profile if present."
 )
 async def get_current_organizer_session(
-    authorization: Optional[str] = Header(None),
+    user_id: uuid.UUID = Depends(get_current_user_id_from_token),
     db: AsyncSession = Depends(get_db)
 ):
     """Fetch current session status and organizer details."""
-    if not authorization or not authorization.startswith("Bearer "):
-        return OrganizerSessionResponse(authenticated=False)
-
-    try:
-        user_id = await _resolve_user_uuid_from_header(authorization, db)
-    except HTTPException:
-        return OrganizerSessionResponse(authenticated=False)
-
-    if not user_id:
-        return OrganizerSessionResponse(authenticated=False)
-
     user = await OrganizerRepository.get_user_by_id(db, user_id)
     if not user:
-        return OrganizerSessionResponse(authenticated=False)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user record not found."
+        )
 
     organizer = await OrganizerRepository.get_organizer_by_user_id(db, user_id)
     is_complete = _is_organizer_profile_complete(organizer)
@@ -310,11 +323,11 @@ USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_.-]{3,30}$")
     "/check-username",
     response_model=UsernameCheckResponse,
     summary="Check Organizer Username Availability",
-    description="Checks if an organizer username/handle is valid and unique."
+    description="Checks if an organizer username/handle is valid and unique. Requires Bearer token."
 )
 async def check_username_availability(
     username: str,
-    authorization: Optional[str] = Header(None),
+    current_user_id: uuid.UUID = Depends(get_current_user_id_from_token),
     db: AsyncSession = Depends(get_db)
 ):
     """Checks whether the requested organizer handle is available."""
@@ -331,13 +344,6 @@ async def check_username_availability(
 
     if not USERNAME_REGEX.match(clean_username):
         return UsernameCheckResponse(available=False, reason="Only letters, numbers, underscores, dashes & dots allowed.", username=clean_username)
-
-    current_user_id = None
-    if authorization and authorization.startswith("Bearer "):
-        try:
-            current_user_id = await _resolve_user_uuid_from_header(authorization, db)
-        except HTTPException:
-            current_user_id = None
 
     existing = await OrganizerRepository.get_organizer_by_username(db, clean_username, exclude_user_id=current_user_id)
     if existing:
@@ -507,6 +513,17 @@ async def list_db_categories(db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # Event RSVP List (for organizer dashboard)
 # ---------------------------------------------------------------------------
+def _parse_owned_event_uuid(event_id: str) -> uuid.UUID:
+    """Parse organizer event UUID or raise 404."""
+    try:
+        return uuid.UUID(str(event_id).strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found or unauthorized.",
+        ) from exc
+
+
 @router.get(
     "/events/{event_id}/rsvps",
     response_model=List[OrganizerRsvpUserSchema],
@@ -519,7 +536,14 @@ async def list_event_rsvps(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch RSVP attendee list for an organizer-owned event."""
-    return await EventRepository.list_rsvps(db, event_id)
+    parsed_uuid = _parse_owned_event_uuid(event_id)
+    owned_event = await EventRepository.get_organizer_event(db, organizer.id, parsed_uuid)
+    if not owned_event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found or unauthorized.",
+        )
+    return await EventRepository.list_rsvps(db, str(parsed_uuid))
 
 
 class ConfirmRsvpRequest(BaseModel):
@@ -537,10 +561,17 @@ async def confirm_rsvp(
     organizer = Depends(get_current_organizer_from_token),
     db: AsyncSession = Depends(get_db),
 ):
+    parsed_uuid = _parse_owned_event_uuid(body.event_id)
+    owned_event = await EventRepository.get_organizer_event(db, organizer.id, parsed_uuid)
+    if not owned_event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found or unauthorized.",
+        )
     result = await EventRepository.confirm_rsvp(
         db=db,
         redis_storage=redis_event_storage,
-        event_id=body.event_id,
+        event_id=str(parsed_uuid),
         telegram_id=body.telegram_id,
     )
     if not result:

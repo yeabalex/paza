@@ -42,6 +42,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(user_id: str, email: str, role: str) -> str:
     """Generates an HMAC-SHA256 signed JWT bearer token."""
+    if not settings.JWT_SECRET_KEY:
+        raise ValueError("JWT_SECRET_KEY is not configured.")
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
     expires = now + (settings.JWT_ACCESS_TOKEN_EXPIRE_DAYS * 86400)
@@ -67,6 +69,8 @@ def create_access_token(user_id: str, email: str, role: str) -> str:
 
 def decode_access_token(token: str) -> Optional[dict]:
     """Decodes and validates HMAC-SHA256 signed JWT token."""
+    if not settings.JWT_SECRET_KEY:
+        return None
     try:
         parts = token.split(".")
         if len(parts) != 3:

@@ -23,25 +23,26 @@ export const TicketPassScreen: React.FC<TicketPassScreenProps> = ({ eventId, tic
     <div
       style={{
         minHeight: '100vh',
-        background: '#090d16',
-        color: '#ffffff',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
         padding: '24px 20px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontFamily: 'var(--font-family)',
       }}
     >
       <div
         style={{
-          maxWidth: '420px',
+          maxWidth: '440px',
           width: '100%',
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-medium)',
           borderRadius: '24px',
-          padding: '28px 24px',
+          padding: '32px 28px',
           textAlign: 'center',
+          boxShadow: 'var(--shadow-dialog)',
         }}
       >
         <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
