@@ -53,19 +53,27 @@ class UserRepository:
 
         numeric_id = deterministic_numeric_id(clerk_id)
 
-        def _sync_fields(target_user: User) -> None:
+        def _sync_fields(target_user: User) -> bool:
+            changed = False
             if not target_user.clerk_id:
                 target_user.clerk_id = clerk_id
+                changed = True
             if not target_user.telegram_id:
                 target_user.telegram_id = numeric_id
+                changed = True
             if clean_email and not target_user.email:
                 target_user.email = clean_email
+                changed = True
             if full_name and target_user.full_name != full_name:
                 target_user.full_name = full_name
+                changed = True
             if username and target_user.username != username:
                 target_user.username = username
+                changed = True
             if preferred_language and target_user.preferred_language != preferred_language:
                 target_user.preferred_language = preferred_language
+                changed = True
+            return changed
 
         if not user and clean_email:
             email_stmt = select(User).where(User.email == clean_email)
@@ -74,6 +82,7 @@ class UserRepository:
             if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
                 user = candidate
 
+        needs_write = False
         if not user:
             user = User(
                 clerk_id=clerk_id,
@@ -85,29 +94,31 @@ class UserRepository:
                 role=UserRole.USER,
             )
             db.add(user)
+            needs_write = True
             logger.info(f"Provisioned new Clerk user [{clerk_id}] (numeric_id={numeric_id})")
         else:
-            _sync_fields(user)
+            needs_write = _sync_fields(user)
 
-        try:
-            await db.commit()
-        except IntegrityError:
-            await db.rollback()
-            existing = await UserRepository.get_by_clerk_id(db, clerk_id)
-            if not existing:
-                existing = await UserRepository.get_by_telegram_id(db, numeric_id)
-            if not existing and clean_email:
-                email_res = await db.execute(select(User).where(User.email == clean_email))
-                candidate = email_res.scalar_one_or_none()
-                if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
-                    existing = candidate
-            if not existing:
-                raise
-            _sync_fields(existing)
-            await db.commit()
-            user = existing
+        if needs_write:
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                existing = await UserRepository.get_by_clerk_id(db, clerk_id)
+                if not existing:
+                    existing = await UserRepository.get_by_telegram_id(db, numeric_id)
+                if not existing and clean_email:
+                    email_res = await db.execute(select(User).where(User.email == clean_email))
+                    candidate = email_res.scalar_one_or_none()
+                    if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
+                        existing = candidate
+                if not existing:
+                    raise
+                if _sync_fields(existing):
+                    await db.commit()
+                user = existing
+            await db.refresh(user)
 
-        await db.refresh(user)
         return user
 
     @staticmethod

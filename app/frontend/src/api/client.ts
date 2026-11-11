@@ -22,6 +22,8 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+const REQUEST_TIMEOUT_MS = 45000;
+
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T | null> {
   const authHeaders = await getAuthHeaders();
   const method = (options.method || 'GET').toUpperCase();
@@ -29,7 +31,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, r
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
