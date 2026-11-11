@@ -1,5 +1,5 @@
 # Proxy API requests to the backend server
-/api/*  https://3.223.18.171.nip.io/api/:splat  200
+/api/*  https://paza.yab.et/api/:splat  200
 
 # SPA fallback — serve index.html for all other routes
 /*  /index.html  200

@@ -172,7 +172,7 @@ jobs:
           FRONTEND_IMAGE=$(echo "${FRONTEND_IMAGE_RAW}" | tr '[:upper:]' '[:lower:]')
 
           ssh -i ~/.ssh/deploy_key ${SSH_USER}@${SERVER_IP} \
-            APP_DIR="$APP_DIR" BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" GITHUB_ACTOR="$GITHUB_ACTOR" SERVER_IP="$SERVER_IP" \
+            APP_DIR="$APP_DIR" BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" GITHUB_ACTOR="$GITHUB_ACTOR" GITHUB_TOKEN="$GITHUB_TOKEN" SERVER_IP="$SERVER_IP" \
             'bash -s' << 'SSHEOF'
             set -e
             cd "$APP_DIR"

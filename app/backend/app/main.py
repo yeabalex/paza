@@ -54,23 +54,28 @@ app = FastAPI(
 # Global fail-closed Auth Middleware (added before CORS so CORS wraps 401/403 responses)
 app.add_middleware(AuthEnforcementMiddleware)
 
-# CORS middleware configuration (outermost wrapper)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+_cors_origins = [
+    "https://paza.yab.et",
+    "https://www.paza.yab.et",
+]
+if settings.WEB_APP_URL and settings.WEB_APP_URL not in _cors_origins:
+    _cors_origins.append(settings.WEB_APP_URL)
+
+if not is_prod:
+    _cors_origins.extend([
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
         "http://localhost:3000",
-        "http://100.89.217.81:5173",
-        "http://100.89.217.81:5174",
-        "https://paza-bot.netlify.app",
-        "https://paza-organizers.netlify.app",
-        "https://paza.yab.et",
-        settings.WEB_APP_URL,
-    ],
-    allow_origin_regex=r"https://.*\.netlify\.app|https://.*\.ngrok-free\.app|https://.*\.ngrok\.io|http://localhost:.*|http://127\.0\.0\.1:.*|http://100\..*|http://192\.168\..*|http://10\..*",
+        "http://127.0.0.1:3000",
+    ])
+
+# CORS middleware configuration (outermost wrapper)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_origin_regex=None if is_prod else r"http://localhost:.*|http://127\.0\.0\.1:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

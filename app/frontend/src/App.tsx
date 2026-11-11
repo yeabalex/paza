@@ -4,6 +4,7 @@ import { fetchInterests, fetchUserProfile, updateUserInterests } from './api/use
 import {
   EXPLORE_PAGE_SIZE,
   fetchExploreEvents,
+  fetchEventDetail,
   fetchCategories,
   saveScrapedEvent,
   removeSavedScrapedEvent,
@@ -128,6 +129,28 @@ export function App() {
             setSelectedSlugs(effectiveSlugs);
           }
 
+          // Hydrate bookmarked events from PostgreSQL so saved state persists across reloads
+          if (profile.telegram_id) {
+            fetchSavedScrapedEvents(profile.telegram_id)
+              .then((savedList) => {
+                const map: Record<string, boolean> = {};
+                for (const item of savedList) {
+                  if (item?.id) map[item.id] = true;
+                }
+                setJoinedEvents(map);
+              })
+              .catch(() => {});
+          }
+
+          // Open deep-linked event (?event_id=...) automatically after authentication
+          if (eventIdParam && !ticketCodeParam) {
+            fetchEventDetail(eventIdParam)
+              .then((detail) => {
+                if (detail) setSelectedEvent(detail);
+              })
+              .catch(() => {});
+          }
+
           if (effectiveSlugs.length > 0 || hasOnboardedLocally) {
             setViewState('feed');
           } else {
@@ -152,7 +175,6 @@ export function App() {
     const loadFirstPage = async () => {
       setIsLoadingEvents(true);
       setHasMore(true);
-      setSelectedEvent(null);
 
       fetchCategories().then((cats) => {
         if (cats && cats.length > 0) {
@@ -256,37 +278,83 @@ export function App() {
     setViewState('feed');
   };
 
+  // Sync page title & browser history Back/Forward navigation for EventDetail URLs
+  useEffect(() => {
+    document.title = selectedEvent
+      ? `${selectedEvent.title} — PAZA Events`
+      : 'PAZA Events — Addis Ababa';
+  }, [selectedEvent]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const eid = params.get('event_id');
+      if (!eid) {
+        setSelectedEvent(null);
+      } else {
+        fetchEventDetail(eid)
+          .then((detail) => {
+            if (detail) setSelectedEvent(detail);
+          })
+          .catch(() => {});
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleOpenEvent = (ev: EventItem) => {
+    setSelectedEvent(ev);
+    const url = new URL(window.location.href);
+    url.searchParams.set('event_id', ev.id);
+    window.history.pushState({ eventId: ev.id }, '', url.toString());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCloseEvent = () => {
+    setSelectedEvent(null);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('event_id')) {
+      url.searchParams.delete('event_id');
+      window.history.pushState({}, '', url.pathname + (url.search ? url.search : ''));
+    }
+  };
+
   const toggleJoin = (eventId: string) => {
     if (!isSignedIn || !user?.telegram_id) {
       if (isClerkEnabled) openSignIn();
       return;
     }
-    const targetEvent = events.find((e) => e.id === eventId);
+    const targetEvent = events.find((e) => e.id === eventId) || (selectedEvent?.id === eventId ? selectedEvent : undefined);
     const userId = user.telegram_id;
+    const willSave = !joinedEvents[eventId];
 
-    setJoinedEvents((prev) => {
-      const isJoined = !prev[eventId];
+    setJoinedEvents((prev) => ({ ...prev, [eventId]: willSave }));
 
-      if (targetEvent) {
-        if (isJoined) {
-          saveScrapedEvent(userId, targetEvent);
-        } else {
-          removeSavedScrapedEvent(userId, eventId);
-        }
-      }
-
-      return { ...prev, [eventId]: isJoined };
-    });
+    if (targetEvent) {
+      const request = willSave
+        ? saveScrapedEvent(userId, targetEvent)
+        : removeSavedScrapedEvent(userId, eventId);
+      request
+        .then((ok) => {
+          if (!ok) {
+            setJoinedEvents((prev) => ({ ...prev, [eventId]: !willSave }));
+          }
+        })
+        .catch(() => {
+          setJoinedEvents((prev) => ({ ...prev, [eventId]: !willSave }));
+        });
+    }
   };
 
   const handleSelectTab = (tab: string) => {
-    setSelectedEvent(null);
+    handleCloseEvent();
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleBrandClick = () => {
-    setSelectedEvent(null);
+    handleCloseEvent();
     setActiveTab('home');
     setSearchQuery('');
     setActiveCategory('all');
@@ -311,7 +379,13 @@ export function App() {
       <TicketPassScreen
         eventId={verifyTicketParams.eventId}
         ticketCode={verifyTicketParams.ticketCode}
-        onClose={() => setVerifyTicketParams(null)}
+        onClose={() => {
+          setVerifyTicketParams(null);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('verify_event_id');
+          url.searchParams.delete('ticket_code');
+          window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+        }}
       />
     );
   }
@@ -394,7 +468,7 @@ export function App() {
         <EventDetail
           event={selectedEvent}
           isJoined={!!joinedEvents[selectedEvent.id]}
-          onBack={() => setSelectedEvent(null)}
+          onBack={handleCloseEvent}
           onToggleJoin={toggleJoin}
           user={currentUser}
         />
@@ -615,9 +689,9 @@ export function App() {
                     key={ev.id}
                     event={ev}
                     viewMode={viewMode}
-                    isJoined={activeTab === 'saved' || activeTab === 'tickets' ? true : !!joinedEvents[ev.id]}
+                    isJoined={!!joinedEvents[ev.id]}
                     onToggleJoin={toggleJoin}
-                    onClick={() => setSelectedEvent(ev)}
+                    onClick={() => handleOpenEvent(ev)}
                   />
                 ))}
               </div>

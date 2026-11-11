@@ -612,11 +612,10 @@ class EventRepository:
         event_id: str,
         telegram_id: int,
     ) -> Optional[dict]:
-        """Confirm attendee RSVP, generate ticket code, and send Telegram notification via bot."""
+        """Confirm attendee RSVP and generate a digital entry ticket code."""
         import urllib.parse
         import random
         import string
-        import httpx
 
         clean_id = urllib.parse.unquote(str(event_id)).strip()
         stmt = select(EventRsvp).where(
@@ -637,17 +636,13 @@ class EventRepository:
         rsvp.status = "confirmed"
         await db.commit()
 
-        # Fetch event title for Telegram message
-        evt_detail = await EventRepository.get_event_detail(db=db, redis_storage=redis_storage, event_id=clean_id)
-        event_title = evt_detail.title if evt_detail else "Event"
-
-        # Build verification URL
         web_app_url = settings.WEB_APP_URL.rstrip('/')
-        verify_url = f"{web_app_url}/?verify_event_id={clean_id}&ticket_code={rsvp.ticket_code}"
+        verify_url = f"{web_app_url}/?verify_event_id={urllib.parse.quote(clean_id)}&ticket_code={rsvp.ticket_code}"
 
         return {
             "ticket_code": rsvp.ticket_code,
             "status": rsvp.status,
+            "verify_url": verify_url,
             "message": "Attendance confirmed."
         }
 

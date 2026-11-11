@@ -620,4 +620,56 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(upload_res.status_code, 200)
                 self.assertIn("s3.amazonaws.com", upload_res.json()["url"])
 
+    async def test_web_app_schemas_and_cors_reject_legacy_wildcards(self):
+        from app.db.session import get_db
+
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        token = jwt.encode(
+            {"sub": "user_webapp_1", "email": "web@paza.et", "exp": int(time.time()) + 300},
+            priv,
+            algorithm="RS256",
+        )
+
+        async def _fake_db():
+            yield object()
+
+        captured = {}
+
+        async def _fake_mark_rsvp(db, body):
+            captured["telegram_id"] = body.telegram_id
+            return True
+
+        app.dependency_overrides[get_db] = _fake_db
+        try:
+            transport = ASGITransport(app=app)
+            with (
+                patch.object(security_module, "clerk_verifier", verifier),
+                patch("app.api.v1.endpoints.events.EventRepository.mark_rsvp", new=_fake_mark_rsvp),
+            ):
+                async with AsyncClient(transport=transport, base_url="http://test") as client:
+                    # Legacy wildcard origins (netlify / ngrok) should NOT receive CORS allow header
+                    evil_cors = await client.options(
+                        "/api/v1/health",
+                        headers={
+                            "Origin": "https://evil.netlify.app",
+                            "Access-Control-Request-Method": "GET",
+                        },
+                    )
+                    self.assertIsNone(evil_cors.headers.get("access-control-allow-origin"))
+
+                    # Web client RSVP payload works without telegram_id and server populates Clerk deterministic ID
+                    rsvp_res = await client.post(
+                        "/api/v1/events/rsvp",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"event_id": "ig:abc", "first_name": "Abebe"},
+                    )
+                    self.assertEqual(rsvp_res.status_code, 200)
+                    self.assertEqual(
+                        captured["telegram_id"],
+                        security_module.deterministic_numeric_id("user_webapp_1"),
+                    )
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
 

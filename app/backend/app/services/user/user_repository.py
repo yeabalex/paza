@@ -96,7 +96,7 @@ class UserRepository:
         preferred_language: str = "en",
         force_sync: bool = False
     ) -> User:
-        """Create or update user upon bot /start or Mini App launch."""
+        """Create or update user upon Web App login."""
         user = await UserRepository.get_by_telegram_id(db, telegram_id)
         if not user:
             user = User(

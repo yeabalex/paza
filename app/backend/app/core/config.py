@@ -48,13 +48,7 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: str = ""
 
     # Web App Settings
-    WEB_APP_URL: str = "http://localhost:3000"
-    ORGANIZER_PORTAL_URL: str = "https://paza-organizers.netlify.app"
-
-    @property
-    def MINI_APP_URL(self) -> str:
-        """Backwards-compatibility alias for WEB_APP_URL."""
-        return self.WEB_APP_URL
+    WEB_APP_URL: str = "http://localhost:5173"
 
     # Scraper Session Credentials
     INSTAGRAM_USERNAME: str = ""

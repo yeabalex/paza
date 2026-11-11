@@ -19,10 +19,7 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
     }
   }
 
-  return {
-    'ngrok-skip-browser-warning': 'true',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}, retries = 2): Promise<T | null> {

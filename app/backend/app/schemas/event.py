@@ -231,11 +231,11 @@ class CategoryInfo(BaseModel):
 
 class RsvpRequest(BaseModel):
     event_id: str = Field(..., description="Event ID to RSVP to")
-    telegram_id: int = Field(..., description="Telegram user ID")
-    first_name: str = Field(..., description="User's first name from TG profile")
+    telegram_id: Optional[int] = Field(None, description="Numeric user ID (resolved from JWT when omitted)")
+    first_name: str = Field(..., description="User's first or display name")
     full_name: Optional[str] = Field(None, description="Attendee's provided full name")
-    username: Optional[str] = Field(None, description="TG username")
-    photo_url: Optional[str] = Field(None, description="TG small avatar URL")
+    username: Optional[str] = Field(None, description="User handle")
+    photo_url: Optional[str] = Field(None, description="User avatar URL")
     message: Optional[str] = Field(None, max_length=140, description="Optional short going message")
     transaction_id: Optional[str] = Field(None, description="Payment transaction reference/ID")
     screenshot_url: Optional[str] = Field(None, description="Uploaded payment receipt screenshot URL")
@@ -258,7 +258,7 @@ class RsvpUserSchema(BaseModel):
 
 
 class SaveScrapedEventRequest(BaseModel):
-    telegram_id: int
+    telegram_id: Optional[int] = None
     event_id: str
     event_data: dict
 

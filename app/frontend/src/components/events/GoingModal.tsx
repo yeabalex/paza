@@ -7,19 +7,13 @@ interface GoingModalProps {
 }
 
 export function GoingModal({ rsvps, onClose }: GoingModalProps) {
-  const handleProfileClick = (user: RsvpUser) => {
-    if (user.username) {
-      window.open(`tg://resolve?domain=${user.username}`, '_blank');
-    }
-  };
-
   return (
     <div className="going-modal-backdrop" onClick={onClose}>
       <div className="going-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="going-modal-header">
           <h3>{rsvps.length} {rsvps.length === 1 ? 'Person' : 'People'} Going</h3>
-          <button type="button" className="going-modal-close" onClick={onClose}>
+          <button type="button" className="going-modal-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -27,14 +21,13 @@ export function GoingModal({ rsvps, onClose }: GoingModalProps) {
         {/* RSVP List */}
         <div className="going-modal-list">
           {rsvps.map((user) => (
-            <div
-              key={user.telegram_id}
-              className={`rsvp-item ${user.username ? 'clickable' : ''}`}
-              onClick={() => handleProfileClick(user)}
-            >
+            <div key={user.telegram_id} className="rsvp-item">
               {/* Avatar */}
               <div className="rsvp-avatar" style={{ position: 'relative' }}>
-                <span className="rsvp-avatar-initial" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span
+                  className="rsvp-avatar-initial"
+                  style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
                   {(user.first_name || user.full_name || 'A').charAt(0).toUpperCase()}
                 </span>
                 {user.photo_url && (
