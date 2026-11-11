@@ -140,8 +140,19 @@ async def list_all_active_events(
     db: AsyncSession = Depends(get_db)
 ):
     """Combines explore scraped events and organizer events."""
-    scraped = await list_explore_scraped_events(category=category)
-    organizer = await list_for_you_organizer_events(category=category, db=db)
+    try:
+        scraped = await EventRepository.list_explore_scraped_events(
+            redis_storage=redis_event_storage,
+            category=category,
+            skip=0,
+            limit=50,
+            timeframe="upcoming",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to fetch scraped events in combined feed: {e}")
+        scraped = []
+
+    organizer = await EventRepository.list_organizer_events(db=db, category=category)
     return scraped + organizer
 
 

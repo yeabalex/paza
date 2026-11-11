@@ -698,4 +698,85 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(existing_oauth_user.hashed_password)
         fake_db.commit.assert_not_awaited()
 
+    async def test_organizer_event_detail_and_combined_feed_endpoints(self):
+        from datetime import datetime, timedelta, timezone
+        from types import SimpleNamespace
+        import uuid
+        from app.db.session import get_db
+        from app.services.event.event_repository import EventRepository
+
+        event_uuid = uuid.uuid4()
+        org_uuid = uuid.uuid4()
+        fake_evt = SimpleNamespace(
+            id=event_uuid,
+            title="Addis Indie Showcase",
+            description="Live show",
+            venue_name="Fendika",
+            sub_city="Arada",
+            start_time=datetime.now(timezone.utc) + timedelta(days=2),
+            end_time=None,
+            price_etb=250.0,
+            image_url="https://example.com/poster.png",
+        )
+        fake_org = SimpleNamespace(
+            id=org_uuid,
+            org_name="Fendika Cultural",
+            username="fendika",
+            logo_url=None,
+            is_verified=True,
+            payout_bank_details=None,
+        )
+        fake_interest = SimpleNamespace(slug="music")
+
+        class _ScalarRes:
+            def __init__(self, scalar=None, one=None):
+                self._scalar = scalar
+                self._one = one
+            def scalar(self): return self._scalar
+            def scalar_one_or_none(self): return self._scalar
+            def one_or_none(self): return self._one
+
+        async def _fake_execute(stmt):
+            sql = str(stmt)
+            if "FROM event_rsvps" in sql:
+                return _ScalarRes(scalar=4)
+            if "count(*)" in sql.lower() and "FROM events" in sql:
+                return _ScalarRes(scalar=3)
+            return _ScalarRes(one=(fake_evt, fake_org, fake_interest))
+
+        fake_db = SimpleNamespace(execute=_fake_execute)
+        fake_redis = SimpleNamespace(get_all_active_events=AsyncMock(return_value=[]))
+
+        detail = await EventRepository.get_event_detail(fake_db, fake_redis, str(event_uuid))
+        self.assertIsNotNone(detail)
+        self.assertEqual(detail.category, "music")
+        self.assertEqual(detail.rsvp_count, 4)
+        fake_redis.get_all_active_events.assert_awaited_once_with(timeframe="all")
+
+        # Also verify GET /api/v1/events works without Query(...) TypeError
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        token = jwt.encode(
+            {"sub": "user_feed_1", "email": "feed@paza.et", "exp": int(time.time()) + 300},
+            priv,
+            algorithm="RS256",
+        )
+
+        async def _dep_db():
+            yield fake_db
+
+        app.dependency_overrides[get_db] = _dep_db
+        try:
+            with (
+                patch.object(security_module, "clerk_verifier", verifier),
+                patch("app.api.v1.endpoints.events.EventRepository.list_explore_scraped_events", new=AsyncMock(return_value=[])),
+                patch("app.api.v1.endpoints.events.EventRepository.list_organizer_events", new=AsyncMock(return_value=[])),
+            ):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    res = await client.get("/api/v1/events", headers={"Authorization": f"Bearer {token}"})
+                    self.assertEqual(res.status_code, 200)
+                    self.assertEqual(res.json(), [])
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
 

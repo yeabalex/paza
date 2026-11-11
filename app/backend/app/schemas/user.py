@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class InterestSchema(BaseModel):
@@ -12,8 +12,7 @@ class InterestSchema(BaseModel):
     name_am: Optional[str] = Field(None, description="Amharic interest name")
     icon_name: Optional[str] = Field(None, description="Emoji or icon identifier")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserProfileSchema(BaseModel):
@@ -29,8 +28,7 @@ class UserProfileSchema(BaseModel):
     is_registered: bool = Field(True, description="True if profile is active")
     interests: List[InterestSchema] = Field(default=[], description="User's selected interests")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InterestSelectionRequest(BaseModel):

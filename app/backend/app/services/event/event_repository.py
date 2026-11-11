@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import joinedload
@@ -174,13 +175,12 @@ class EventRepository:
     ) -> List[EventSummarySchema]:
         """Fetch organizer events from PostgreSQL for For You tab, with organizer verification info."""
         stmt = (
-            select(Event, Organizer)
+            select(Event, Organizer, Interest)
             .outerjoin(Organizer, Event.organizer_id == Organizer.id)
+            .outerjoin(Interest, Event.interest_id == Interest.id)
         )
         if category and category != "all":
-            stmt = stmt.join(Interest, Event.interest_id == Interest.id).where(
-                Interest.slug == category.lower()
-            )
+            stmt = stmt.where(Interest.slug == category.lower())
 
         stmt = stmt.order_by(Event.start_time.desc()).limit(limit)
         res = await db.execute(stmt)
@@ -190,7 +190,7 @@ class EventRepository:
         org_event_counts: dict = {}
 
         results: List[EventSummarySchema] = []
-        for evt, org in rows:
+        for evt, org, interest in rows:
             org_id = str(org.id) if org else None
             org_events_cnt = 0
             if org_id:
@@ -210,7 +210,7 @@ class EventRepository:
                     sub_city=evt.sub_city,
                     start_datetime=evt.start_time.isoformat() if evt.start_time else None,
                     entrance_fee_etb=float(evt.price_etb) if evt.price_etb else 0.0,
-                    category="general",
+                    category=interest.slug if interest else "general",
                     image_url=evt.image_url or "",
                     rsvp_count=evt.rsvp_count or 0,
                     max_capacity=100,
@@ -234,9 +234,9 @@ class EventRepository:
         import urllib.parse
         clean_id = urllib.parse.unquote(event_id).strip()
 
-        # 1. Check Redis for scraped events
+        # 1. Check Redis for scraped events (upcoming and recent past)
         try:
-            raw_events = await redis_storage.get_all_active_events()
+            raw_events = await redis_storage.get_all_active_events(timeframe="all")
             for item in raw_events:
                 post_id = str(item.get("post_id", "unknown"))
                 platform = str(item.get("platform", "ig"))
@@ -370,14 +370,15 @@ class EventRepository:
 
         try:
             stmt = (
-                select(Event, Organizer)
+                select(Event, Organizer, Interest)
                 .outerjoin(Organizer, Event.organizer_id == Organizer.id)
+                .outerjoin(Interest, Event.interest_id == Interest.id)
                 .where(Event.id == val_uuid)
             )
             res = await db.execute(stmt)
             row = res.one_or_none()
             if row:
-                evt, org = row
+                evt, org, interest = row
                 org_evt_id = str(evt.id)
                 rsvp_stmt = (
                     select(func.count())
@@ -422,7 +423,7 @@ class EventRepository:
                     start_datetime=evt.start_time.isoformat() if evt.start_time else None,
                     end_datetime=evt.end_time.isoformat() if evt.end_time else None,
                     entrance_fee_etb=float(evt.price_etb) if evt.price_etb else 0.0,
-                    category="general",
+                    category=interest.slug if interest else "general",
                     image_url=evt.image_url or "",
                     rsvp_count=real_rsvp_count,
                     source_type="organizer",

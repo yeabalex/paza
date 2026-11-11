@@ -2,6 +2,7 @@
 
 import html
 import logging
+import urllib.parse
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -77,6 +78,9 @@ async def broadcast_scraped_events(
     event_id = f"{platform}:{post_id}" if not str(item.get("event_id", "")).startswith(f"{platform}:") else item.get("event_id")
     image_url = evt_data.get("image_url") or item.get("image_url")
 
+    web_app_url = settings.WEB_APP_URL.rstrip("/")
+    encoded_event_id = urllib.parse.quote(str(event_id), safe="")
+
     announcement = {
         "title": title,
         "date": date_str,
@@ -84,7 +88,7 @@ async def broadcast_scraped_events(
         "entrance_fee": fee_str,
         "event_id": event_id,
         "image_url": image_url,
-        "web_url": f"{settings.WEB_APP_URL}/?event_id={event_id}"
+        "web_url": f"{web_app_url}/?event_id={encoded_event_id}",
     }
 
     logger.info(f"Event announcement prepared: {title} ({event_id})")

@@ -5,9 +5,12 @@ Can be called directly as a Python library function, executed via CLI, or trigge
 
 import asyncio
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from app.core.pipeline_logger import PipelineLogger
 from app.schemas.event import ScraperTarget

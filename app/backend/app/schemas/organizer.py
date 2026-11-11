@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 from typing import Optional, List, Any, Union
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # --------------------------------------------------------------------------------
@@ -34,8 +34,6 @@ class TokenResponse(BaseModel):
 # --------------------------------------------------------------------------------
 # Organizer Profile Schemas
 # --------------------------------------------------------------------------------
-import json
-
 class OrganizerProfileCreateUpdate(BaseModel):
     org_name: str = Field(..., min_length=2, max_length=255, description="Name of the Organization / Host")
     username: Optional[str] = Field(None, min_length=3, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$", description="Unique organizer handle/username")
@@ -93,8 +91,7 @@ class OrganizerProfileResponse(BaseModel):
                 pass
         return data
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UsernameCheckResponse(BaseModel):
@@ -177,8 +174,7 @@ class OrganizerEventResponse(BaseModel):
             setattr(data, "is_organizer_verified", data.organizer.is_verified)
         return data
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +195,5 @@ class OrganizerRsvpUserSchema(BaseModel):
     status: Optional[str] = "pending"
     created_at: Optional[Union[str, datetime]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
