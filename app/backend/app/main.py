@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.security import AuthEnforcementMiddleware
 
 
 from app.db.session import engine
@@ -50,7 +51,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware configuration
+# Global fail-closed Auth Middleware (added before CORS so CORS wraps 401/403 responses)
+app.add_middleware(AuthEnforcementMiddleware)
+
+# CORS middleware configuration (outermost wrapper)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

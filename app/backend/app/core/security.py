@@ -9,7 +9,9 @@ import time
 from typing import Optional
 
 import jwt
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.clerk import ClerkAuthError, clerk_verifier
 from app.core.config import settings
@@ -205,5 +207,76 @@ async def get_current_web_user(
             detail="Authentication required.",
         )
     return await resolve_bearer_user(token)
+
+
+class AuthEnforcementMiddleware(BaseHTTPMiddleware):
+    """Fail-closed global HTTP auth middleware enforcing deny-by-default across all routes."""
+
+    PUBLIC_ROUTES = {
+        ("GET", "/"),
+        ("GET", f"{settings.API_V1_STR}/health"),
+        ("POST", f"{settings.API_V1_STR}/organizers/auth/email"),
+        ("POST", f"{settings.API_V1_STR}/organizers/auth/google"),
+    }
+
+    DEV_DOCS_ROUTES = {
+        ("GET", "/docs"),
+        ("GET", "/redoc"),
+        ("GET", f"{settings.API_V1_STR}/openapi.json"),
+    }
+
+    API_KEY_PREFIXES = (
+        f"{settings.API_V1_STR}/scraper/",
+        f"{settings.API_V1_STR}/notifications/",
+    )
+
+    API_KEY_EXACT_ROUTES = {
+        f"{settings.API_V1_STR}/events/cleanup",
+    }
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        route_key = (request.method.upper(), request.url.path)
+        if route_key in self.PUBLIC_ROUTES:
+            return await call_next(request)
+
+        is_prod = settings.ENVIRONMENT.lower() == "production" and not settings.DEBUG
+        if not is_prod and route_key in self.DEV_DOCS_ROUTES:
+            return await call_next(request)
+
+        # Server-to-server endpoints require X-Api-Key
+        path = request.url.path
+        if path.startswith(self.API_KEY_PREFIXES) or path in self.API_KEY_EXACT_ROUTES:
+            x_api_key = request.headers.get("X-Api-Key")
+            if x_api_key is None:
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={"detail": "Missing X-Api-Key header."},
+                )
+            try:
+                await require_api_key(x_api_key)
+                request.state.auth_type = "api_key"
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            return await call_next(request)
+
+        # All other endpoints (including future routes and /static uploads) require valid Bearer JWT
+        try:
+            token = _extract_bearer_token(request.headers.get("Authorization"))
+            if not token:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "Authentication required."},
+                )
+            user_ctx = await resolve_bearer_user(token)
+            request.state.user = user_ctx
+            request.state.auth_type = user_ctx.get("auth_provider", "jwt")
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+        return await call_next(request)
+
 
 

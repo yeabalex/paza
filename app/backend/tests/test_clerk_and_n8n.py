@@ -530,6 +530,14 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
         from app.api.v1.endpoints.organizers import get_current_organizer_from_token
         from app.db.session import get_db
 
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        token = jwt.encode(
+            {"sub": "user_org_1", "email": "org@paza.et", "exp": int(time.time()) + 300},
+            priv,
+            algorithm="RS256",
+        )
+
         async def _fake_db():
             yield object()
 
@@ -538,21 +546,78 @@ class TestEndpointProtection(unittest.IsolatedAsyncioTestCase):
         app.dependency_overrides[get_db] = _fake_db
         try:
             transport = ASGITransport(app=app)
-            with patch(
-                "app.api.v1.endpoints.organizers.EventRepository.get_organizer_event",
-                new=AsyncMock(return_value=None),
+            with (
+                patch.object(security_module, "clerk_verifier", verifier),
+                patch(
+                    "app.api.v1.endpoints.organizers.EventRepository.get_organizer_event",
+                    new=AsyncMock(return_value=None),
+                ),
             ):
                 async with AsyncClient(transport=transport, base_url="http://test") as client:
-                    r1 = await client.get("/api/v1/organizers/events/22222222-2222-2222-2222-222222222222/rsvps")
+                    headers = {"Authorization": f"Bearer {token}"}
+                    r1 = await client.get(
+                        "/api/v1/organizers/events/22222222-2222-2222-2222-222222222222/rsvps",
+                        headers=headers,
+                    )
                     self.assertEqual(r1.status_code, 404)
 
                     r2 = await client.post(
                         "/api/v1/organizers/rsvps/confirm",
+                        headers=headers,
                         json={"event_id": "22222222-2222-2222-2222-222222222222", "telegram_id": 123},
                     )
                     self.assertEqual(r2.status_code, 404)
         finally:
             app.dependency_overrides.pop(get_current_organizer_from_token, None)
             app.dependency_overrides.pop(get_db, None)
+
+    async def test_auth_middleware_denies_by_default_and_preserves_cors_and_uploads(self):
+        priv, pub, _ = _generate_rsa_keypair()
+        verifier = ClerkVerifier(jwt_key=pub)
+        token = jwt.encode(
+            {"sub": "user_mw_ok", "email": "mw@paza.et", "exp": int(time.time()) + 300},
+            priv,
+            algorithm="RS256",
+        )
+
+        transport = ASGITransport(app=app)
+        with (
+            patch.object(security_module, "clerk_verifier", verifier),
+            patch(
+                "app.api.v1.endpoints.events.s3_storage_service.upload_file",
+                new=AsyncMock(return_value="https://paza-events-media.s3.amazonaws.com/rsvps/receipts/test.png"),
+            ),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                # Unknown/unguarded path still rejected by global AuthEnforcementMiddleware
+                unauth_probe = await client.get(
+                    "/api/v1/_unguarded_future_route",
+                    headers={"Origin": "https://paza.yab.et"},
+                )
+                self.assertEqual(unauth_probe.status_code, 401)
+                self.assertEqual(unauth_probe.headers.get("access-control-allow-origin"), "https://paza.yab.et")
+
+                # Static uploads require auth at middleware boundary too
+                static_res = await client.get("/static/uploads/test.png")
+                self.assertEqual(static_res.status_code, 401)
+
+                # CORS preflight passes through cleanly
+                preflight = await client.options(
+                    "/api/v1/events/explore",
+                    headers={
+                        "Origin": "https://paza.yab.et",
+                        "Access-Control-Request-Method": "GET",
+                    },
+                )
+                self.assertEqual(preflight.status_code, 200)
+
+                # Multipart receipt upload passes cleanly through AuthEnforcementMiddleware
+                upload_res = await client.post(
+                    "/api/v1/events/upload-receipt",
+                    headers={"Authorization": f"Bearer {token}"},
+                    files={"file": ("receipt.png", b"png-bytes", "image/png")},
+                )
+                self.assertEqual(upload_res.status_code, 200)
+                self.assertIn("s3.amazonaws.com", upload_res.json()["url"])
 
 
