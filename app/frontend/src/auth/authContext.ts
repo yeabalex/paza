@@ -16,6 +16,7 @@ export interface AppAuthState {
   user: AuthUserInfo | null;
   getToken: () => Promise<string | null>;
   openSignIn: () => void;
+  signOut: () => Promise<void>;
 }
 
 export const DEFAULT_AUTH_STATE: AppAuthState = {
@@ -25,6 +26,7 @@ export const DEFAULT_AUTH_STATE: AppAuthState = {
   user: null,
   getToken: async () => null,
   openSignIn: () => {},
+  signOut: async () => {},
 };
 
 export const AppAuthContext = createContext<AppAuthState>(DEFAULT_AUTH_STATE);

@@ -52,6 +52,7 @@ function ClerkAuthBridge({ children }: { children: ReactNode }) {
   );
 
   const openSignIn = useCallback(() => clerk.openSignIn(), [clerk]);
+  const signOut = useCallback(() => clerk.signOut(), [clerk]);
 
   const value: AppAuthState = useMemo(
     () => ({
@@ -61,8 +62,9 @@ function ClerkAuthBridge({ children }: { children: ReactNode }) {
       user: mappedUser,
       getToken,
       openSignIn,
+      signOut,
     }),
-    [authLoaded, userLoaded, providerReady, isSignedIn, mappedUser, getToken, openSignIn]
+    [authLoaded, userLoaded, providerReady, isSignedIn, mappedUser, getToken, openSignIn, signOut]
   );
 
   return <AppAuthContext.Provider value={value}>{children}</AppAuthContext.Provider>;

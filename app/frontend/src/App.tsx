@@ -22,7 +22,7 @@ import { ExplorePostCard } from './components/events/ExplorePostCard';
 import { InterestSelector } from './components/onboarding/InterestSelector';
 import { EventDetail } from './components/events/EventDetail';
 import { TicketPassScreen } from './components/events/TicketPassScreen';
-import { Calendar, Bookmark, Ticket, LayoutGrid, List, RotateCcw, ShieldAlert } from 'lucide-react';
+import { Calendar, Bookmark, Ticket, LayoutGrid, List, RotateCcw, ShieldAlert, LogOut } from 'lucide-react';
 
 import './App.css';
 
@@ -52,7 +52,7 @@ const DEFAULT_INTERESTS: Interest[] = [
 ];
 
 export function App() {
-  const { isClerkEnabled, isLoaded: authLoaded, isSignedIn, user: clerkUser, openSignIn } = useAppAuth();
+  const { isClerkEnabled, isLoaded: authLoaded, isSignedIn, user: clerkUser, openSignIn, signOut } = useAppAuth();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [availableInterests, setAvailableInterests] = useState<Interest[]>(DEFAULT_INTERESTS);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
@@ -446,17 +446,33 @@ export function App() {
               We couldn&apos;t verify your session with the PAZA backend server. Ensure the backend
               is running with matching Clerk keys and try again.
             </p>
-            <button
-              type="button"
-              className="empty-primary-btn"
-              onClick={() => {
-                setViewState('loading');
-                setAuthRetryTick((n) => n + 1);
-              }}
-            >
-              <RotateCcw size={14} />
-              <span>Retry Verification</span>
-            </button>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="empty-primary-btn"
+                onClick={() => {
+                  setViewState('loading');
+                  setAuthRetryTick((n) => n + 1);
+                }}
+              >
+                <RotateCcw size={14} />
+                <span>Retry Verification</span>
+              </button>
+              {isSignedIn && (
+                <button
+                  type="button"
+                  className="empty-primary-btn"
+                  style={{ background: 'var(--surface-raised)', borderColor: 'var(--border)' }}
+                  onClick={async () => {
+                    await signOut();
+                    window.location.reload();
+                  }}
+                >
+                  <LogOut size={14} />
+                  <span>Sign Out & Reconnect</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
