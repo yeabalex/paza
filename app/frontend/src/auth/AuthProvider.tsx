@@ -8,7 +8,11 @@ import {
   type AuthUserInfo,
 } from './authContext';
 
-const CLERK_PUBLISHABLE_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
+const CLERK_PUBLISHABLE_KEY = (
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
+  import.meta.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  ''
+).trim();
 
 function ClerkAuthBridge({ children }: { children: ReactNode }) {
   const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # Clerk Authentication Settings
     VITE_CLERK_PUBLISHABLE_KEY: str = ""
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: str = ""
     CLERK_PUBLISHABLE_KEY: str = ""
     CLERK_SECRET_KEY: str = ""
 

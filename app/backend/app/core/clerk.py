@@ -94,7 +94,11 @@ class ClerkVerifier:
     def publishable_key(self) -> str:
         if self._publishable_key_override is not None:
             return self._publishable_key_override.strip()
-        return (settings.CLERK_PUBLISHABLE_KEY or settings.VITE_CLERK_PUBLISHABLE_KEY).strip()
+        return (
+            settings.CLERK_PUBLISHABLE_KEY
+            or getattr(settings, "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "")
+            or settings.VITE_CLERK_PUBLISHABLE_KEY
+        ).strip()
 
     @property
     def secret_key(self) -> str:

@@ -10,6 +10,7 @@ const isMonorepo = fs.existsSync(path.join(monorepoRoot, 'turbo.json'))
 // https://vite.dev/config/
 export default defineConfig({
   envDir: isMonorepo ? monorepoRoot : '.',
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   plugins: [react()],
   server: {
     allowedHosts: true,
