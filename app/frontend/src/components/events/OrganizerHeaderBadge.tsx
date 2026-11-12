@@ -17,9 +17,9 @@ export const OrganizerHeaderBadge: React.FC<OrganizerHeaderBadgeProps> = ({
   eventsCount,
   size = 'md',
 }) => {
-  const avatarSize = size === 'sm' ? 28 : size === 'lg' ? 44 : 34;
-  const fontSizeName = size === 'sm' ? '12px' : size === 'lg' ? '16px' : '13.5px';
-  const fontSizeSub = size === 'sm' ? '10px' : size === 'lg' ? '12.5px' : '11px';
+  const avatarSize = size === 'sm' ? 28 : size === 'lg' ? 42 : 34;
+  const fontSizeName = size === 'sm' ? '12.5px' : size === 'lg' ? '15.5px' : '13.5px';
+  const fontSizeSub = size === 'sm' ? '11px' : size === 'lg' ? '12px' : '11.5px';
 
   return (
     <div
@@ -37,17 +37,18 @@ export const OrganizerHeaderBadge: React.FC<OrganizerHeaderBadgeProps> = ({
           style={{
             width: avatarSize,
             height: avatarSize,
-            borderRadius: '50%',
+            borderRadius: '6px',
             overflow: 'hidden',
             flexShrink: 0,
-            background: 'linear-gradient(135deg, #1e293b, #0f172a)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-medium)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontWeight: 700,
-            fontSize: size === 'sm' ? '11px' : '14px',
-            color: '#8ba888',
+            fontWeight: 600,
+            fontFamily: 'var(--font-mono)',
+            fontSize: size === 'sm' ? '11px' : '13px',
+            color: 'var(--text-primary)',
           }}
         >
           {organizerLogo ? (
@@ -62,13 +63,13 @@ export const OrganizerHeaderBadge: React.FC<OrganizerHeaderBadgeProps> = ({
         </div>
 
         {/* Name & Handle */}
-        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span
               style={{
                 fontSize: fontSizeName,
-                fontWeight: 700,
-                color: '#ffffff',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -77,7 +78,6 @@ export const OrganizerHeaderBadge: React.FC<OrganizerHeaderBadgeProps> = ({
               {organizerName}
             </span>
 
-            {/* Green Verified Badge */}
             {isVerified && (
               <span
                 title="Verified Organizer"
@@ -85,42 +85,47 @@ export const OrganizerHeaderBadge: React.FC<OrganizerHeaderBadgeProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: '#22c55e',
-                  color: '#ffffff',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-on)',
                   borderRadius: '50%',
-                  width: '14px',
-                  height: '14px',
+                  width: '13px',
+                  height: '13px',
                   flexShrink: 0,
                 }}
               >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                 </svg>
               </span>
             )}
           </div>
 
-          {/* @username handle */}
           {organizerUsername && (
-            <span style={{ fontSize: fontSizeSub, color: '#8ba888', fontWeight: 600 }}>
+            <span
+              style={{
+                fontSize: fontSizeSub,
+                color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
               @{organizerUsername.replace(/^@/, '')}
             </span>
           )}
         </div>
       </div>
 
-      {/* Events Hosted Count Pill */}
       {eventsCount !== undefined && eventsCount > 0 && (
         <span
           style={{
-            color: '#8ba888',
-            fontSize: '10.5px',
-            fontWeight: 600,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            fontWeight: 500,
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}
         >
-          {eventsCount} {eventsCount === 1 ? 'Event Hosted' : 'Events Hosted'}
+          {eventsCount} {eventsCount === 1 ? 'event' : 'events'}
         </span>
       )}
     </div>

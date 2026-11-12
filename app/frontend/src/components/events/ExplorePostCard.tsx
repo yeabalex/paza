@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { MapPin, Bookmark, Clock, ArrowUpRight } from 'lucide-react';
+import { Bookmark } from 'lucide-react';
 import type { EventItem } from '../../types';
+import { getEventPosterTheme } from '../../utils/theme';
 
 interface ExplorePostCardProps {
   event: EventItem;
@@ -10,103 +11,33 @@ interface ExplorePostCardProps {
   viewMode?: 'grid' | 'list';
 }
 
-const CATEGORY_THEMES: Record<string, { label: string; gradient: string; tint: string }> = {
-  music: {
-    label: 'Music & Concerts',
-    gradient: 'linear-gradient(135deg, #13251f 0%, #0d1614 60%, #1c2c22 100%)',
-    tint: '#8BA888',
-  },
-  nightlife: {
-    label: 'Nightlife',
-    gradient: 'linear-gradient(135deg, #241422 0%, #110d14 60%, #2a1820 100%)',
-    tint: '#e5989b',
-  },
-  tech: {
-    label: 'Tech & Software',
-    gradient: 'linear-gradient(135deg, #10202b 0%, #0b1116 60%, #162a35 100%)',
-    tint: '#7dd3fc',
-  },
-  business: {
-    label: 'Business',
-    gradient: 'linear-gradient(135deg, #211c12 0%, #11100c 60%, #292113 100%)',
-    tint: '#D4A76A',
-  },
-  art: {
-    label: 'Arts & Culture',
-    gradient: 'linear-gradient(135deg, #251915 0%, #120e0d 60%, #2d1f19 100%)',
-    tint: '#e2a38a',
-  },
-  food: {
-    label: 'Food & Coffee',
-    gradient: 'linear-gradient(135deg, #231910 0%, #110e0b 60%, #2c1e14 100%)',
-    tint: '#deb887',
-  },
-  cinema: {
-    label: 'Cinema & Theater',
-    gradient: 'linear-gradient(135deg, #1f1419 0%, #0f0d10 60%, #291821 100%)',
-    tint: '#d89ca8',
-  },
-  sports: {
-    label: 'Sports & Gaming',
-    gradient: 'linear-gradient(135deg, #14221a 0%, #0c1310 60%, #1a2d21 100%)',
-    tint: '#86efac',
-  },
-  fitness: {
-    label: 'Health & Wellness',
-    gradient: 'linear-gradient(135deg, #15241f 0%, #0c1311 60%, #1d3129 100%)',
-    tint: '#99f6e4',
-  },
-  outdoor: {
-    label: 'Outdoors & Travel',
-    gradient: 'linear-gradient(135deg, #162216 0%, #0c120d 60%, #1f2e1d 100%)',
-    tint: '#A3C4A0',
-  },
-  education: {
-    label: 'Workshops & Learning',
-    gradient: 'linear-gradient(135deg, #151b28 0%, #0d1016 60%, #1b2436 100%)',
-    tint: '#93c5fd',
-  },
-  community: {
-    label: 'Community',
-    gradient: 'linear-gradient(135deg, #172018 0%, #0e120f 60%, #202c22 100%)',
-    tint: '#8BA888',
-  },
+const CATEGORY_LABELS: Record<string, string> = {
+  music: 'Music',
+  nightlife: 'Nightlife',
+  tech: 'Tech',
+  business: 'Business',
+  art: 'Arts & Culture',
+  food: 'Food & Coffee',
+  cinema: 'Cinema',
+  sports: 'Sports',
+  fitness: 'Wellness',
+  outdoor: 'Outdoors',
+  education: 'Workshop',
+  community: 'Community',
+  fashion: 'Fashion',
+  bazaars: 'Bazaar',
+  charity: 'Cause',
+  kids: 'Family',
+  realestate: 'Design',
+  science: 'Science',
+  books: 'Literature',
+  faith: 'Spiritual',
+  government: 'Policy',
 };
 
-function getCategoryMeta(rawCategory?: string) {
+function getCategoryLabel(rawCategory?: string): string {
   const slug = (rawCategory || 'general').toLowerCase().trim();
-  return (
-    CATEGORY_THEMES[slug] || {
-      label: slug.charAt(0).toUpperCase() + slug.slice(1),
-      gradient: 'linear-gradient(135deg, #161d17 0%, #0c0e0d 60%, #1c241d 100%)',
-      tint: '#8BA888',
-    }
-  );
-}
-
-function getSourceLabel(event: EventItem): string | null {
-  if (event.source_type === 'organizer') {
-    return event.organizer_name || 'Verified Host';
-  }
-  const id = (event.id || '').toLowerCase();
-  const url = (event.post_url || '').toLowerCase();
-  if (id.startsWith('ig:') || id.startsWith('instagram:') || url.includes('instagram.com')) {
-    return 'Instagram';
-  }
-  if (id.startsWith('tg:') || id.startsWith('telegram:') || url.includes('t.me')) {
-    return 'Telegram';
-  }
-  if (id.startsWith('tiktok:') || url.includes('tiktok.com')) {
-    return 'TikTok';
-  }
-  return null;
-}
-
-function getSnippet(event: EventItem): string | null {
-  const raw = (event.short_description || event.description || '').replace(/\s+/g, ' ').trim();
-  if (!raw || raw.length < 12) return null;
-  if (raw.toLowerCase() === event.title.toLowerCase()) return null;
-  return raw;
+  return CATEGORY_LABELS[slug] || slug.charAt(0).toUpperCase() + slug.slice(1);
 }
 
 export function ExplorePostCard({
@@ -125,70 +56,83 @@ export function ExplorePostCard({
     ? startDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
     : 'TBD';
 
-  const day = isValidDate ? startDate.getDate().toString() : '—';
+  const day = isValidDate ? startDate.getDate().toString().padStart(2, '0') : '—';
 
   const weekday = isValidDate
-    ? startDate.toLocaleDateString('en-US', { weekday: 'short' })
+    ? startDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
     : null;
 
   const timeStr = isValidDate
     ? startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
     : null;
 
-  const catMeta = getCategoryMeta(event.category);
-  const sourceLabel = getSourceLabel(event);
+  const catLabel = getCategoryLabel(event.category);
   const hasImage = Boolean(event.image_url && event.image_url.trim().length > 0 && !imgError);
-  const snippet = getSnippet(event);
   const locationText = `${event.venue_name || 'Addis Ababa'}${event.sub_city ? `, ${event.sub_city}` : ''}`;
+  const posterTheme = getEventPosterTheme(event.id, event.title);
+
+  const dateLine = isValidDate
+    ? `${weekday ? `${weekday}, ` : ''}${month} ${day}${timeStr ? ` · ${timeStr}` : ''}`
+    : 'DATE TBA';
+
+  const priceText = event.is_passed
+    ? 'Ended'
+    : event.entrance_fee_etb > 0
+    ? `${event.entrance_fee_etb.toLocaleString()} ETB`
+    : 'Free';
 
   if (viewMode === 'list') {
     return (
       <article className="event-row" onClick={onClick}>
-        {/* Date Column */}
+        {/* Tabular Date Column */}
         <div className="event-date-col">
-          <span className="event-date-month">{month}</span>
-          <span className="event-date-day">{day}</span>
+          <span className="event-date-month">{month} {day}</span>
+          <span className="event-date-weekday">{weekday || 'TBA'}</span>
         </div>
 
-        {/* Optional mini thumbnail on desktop */}
+        {/* Thumbnail */}
         {hasImage ? (
           <div className="event-row-thumb">
             <img src={event.image_url} alt={event.title} loading="lazy" onError={() => setImgError(true)} />
           </div>
         ) : (
-          <div className="event-row-thumb placeholder" style={{ background: catMeta.gradient, color: catMeta.tint }}>
-            <span>{catMeta.label.charAt(0)}</span>
+          <div
+            className="event-row-thumb placeholder"
+            style={{
+              background: posterTheme.gradient,
+              color: posterTheme.accent,
+              borderColor: posterTheme.border,
+            }}
+          >
+            <span>{catLabel.slice(0, 2).toUpperCase()}</span>
           </div>
         )}
 
         {/* Event Info */}
         <div className="event-info-col">
-          <div className="event-row-top-meta">
-            <span className="event-row-category" style={{ color: catMeta.tint }}>
-              {catMeta.label}
-            </span>
-            {timeStr && (
-              <span className="event-row-time">
-                <Clock size={11} />
-                {weekday ? `${weekday} · ${timeStr}` : timeStr}
-              </span>
-            )}
-          </div>
           <h3 className="event-row-title">{event.title}</h3>
-          <div className="event-row-venue">
-            <MapPin size={12} />
-            <span>{locationText}</span>
+          <div className="event-row-sub">
+            <span className="event-row-venue">{locationText}</span>
+            {timeStr && (
+              <>
+                <span className="meta-sep">·</span>
+                <span className="event-row-time">{timeStr}</span>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Fee / Status Badge */}
-        {event.is_passed ? (
-          <span className="event-row-badge ended">ENDED</span>
-        ) : (
-          <span className={`event-row-badge ${event.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
-            {event.entrance_fee_etb > 0 ? `${event.entrance_fee_etb} ETB` : 'FREE'}
+        {/* Category + Fee */}
+        <div className="event-row-right">
+          <span className="event-row-cat-tag">{catLabel}</span>
+          <span
+            className={`event-row-price ${
+              event.is_passed ? 'ended' : event.entrance_fee_etb > 0 ? 'paid' : 'free'
+            }`}
+          >
+            {priceText}
           </span>
-        )}
+        </div>
 
         {/* Bookmark Action */}
         <button
@@ -202,9 +146,8 @@ export function ExplorePostCard({
           }}
         >
           <Bookmark
-            size={16}
-            fill={isJoined ? 'var(--accent)' : 'none'}
-            color={isJoined ? 'var(--accent)' : 'var(--text-muted)'}
+            size={15}
+            fill={isJoined ? 'currentColor' : 'none'}
           />
         </button>
       </article>
@@ -213,98 +156,106 @@ export function ExplorePostCard({
 
   return (
     <article className="event-grid-card" onClick={onClick}>
-      {/* Poster / Cover Header */}
-      <div className="event-card-poster" style={!hasImage ? { background: catMeta.gradient } : undefined}>
+      {/* Poster Frame */}
+      <div className="event-card-poster">
         {hasImage ? (
-          <>
-            <img
-              src={event.image_url}
-              alt={event.title}
-              className="event-card-poster-img"
-              loading="lazy"
-              onError={() => setImgError(true)}
-            />
-            <div className="event-card-poster-scrim" />
-          </>
+          <img
+            src={event.image_url}
+            alt={event.title}
+            className="event-card-poster-img"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
         ) : (
-          <div className="event-card-poster-editorial">
-            <div className="poster-ring poster-ring-1" style={{ borderColor: catMeta.tint }} />
-            <div className="poster-ring poster-ring-2" style={{ borderColor: catMeta.tint }} />
-            <span className="poster-editorial-cat" style={{ color: catMeta.tint }}>
-              {catMeta.label}
-            </span>
-            <span className="poster-editorial-date">
-              {isValidDate ? `${weekday ? `${weekday}, ` : ''}${month} ${day}` : 'Addis Ababa'}
-            </span>
+          <div
+            className="event-card-poster-gradient"
+            style={{ background: posterTheme.gradient }}
+          >
+            {/* Architectural Grid & Watermark */}
+            <div
+              className="poster-ambient-watermark"
+              style={{ color: posterTheme.watermarkColor }}
+              aria-hidden="true"
+            >
+              {catLabel.charAt(0)}
+            </div>
+
+            {/* Top Bar: Category pill + Date chip */}
+            <div className="poster-top-bar">
+              <span
+                className="poster-cat-badge"
+                style={{
+                  color: posterTheme.accent,
+                  backgroundColor: posterTheme.accentSoft,
+                  borderColor: posterTheme.border,
+                }}
+              >
+                {catLabel}
+              </span>
+
+              <span
+                className="poster-date-badge"
+                style={{
+                  color: posterTheme.accent,
+                  borderColor: posterTheme.border,
+                }}
+              >
+                {isValidDate ? `${month} ${day}` : 'ADDIS'}
+              </span>
+            </div>
+
+            {/* Center Hero: Bold Event Title */}
+            <div className="poster-headline-wrap">
+              <h4 className="poster-headline">{event.title}</h4>
+            </div>
+
+            {/* Bottom Bar: Venue and Time */}
+            <div className="poster-bottom-bar">
+              <span className="poster-venue-text">
+                {event.venue_name || 'Addis Ababa'}
+              </span>
+              {timeStr && (
+                <span className="poster-time-text" style={{ color: posterTheme.accent }}>
+                  {timeStr}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Floating Date Chip */}
-        <div className="card-date-chip">
-          <span className="card-date-month">{month}</span>
-          <span className="card-date-day">{day}</span>
-        </div>
-
-        {/* Floating Price / Status Badge */}
-        {event.is_passed ? (
-          <span className="card-fee-chip ended">ENDED</span>
-        ) : (
-          <span className={`card-fee-chip ${event.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
-            {event.entrance_fee_etb > 0 ? `${event.entrance_fee_etb} ETB` : 'FREE'}
-          </span>
-        )}
-
-        {/* Bottom-left source indicator */}
-        {sourceLabel && (
-          <span className="card-source-chip">{sourceLabel}</span>
-        )}
+        {/* Floating Bookmark */}
+        <button
+          type="button"
+          className={`card-floating-save ${isJoined ? 'saved' : ''}`}
+          title={isJoined ? 'Remove from Saved' : 'Save event'}
+          aria-label={isJoined ? 'Remove from Saved' : 'Save event'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleJoin(event.id);
+          }}
+        >
+          <Bookmark size={14} fill={isJoined ? 'currentColor' : 'none'} />
+        </button>
       </div>
 
-      {/* Card Body */}
+      {/* Editorial Body Below Poster */}
       <div className="event-card-body">
         <div className="event-card-eyebrow">
-          <span className="event-card-category" style={{ color: catMeta.tint }}>
-            {catMeta.label}
-          </span>
-          {timeStr && (
-            <span className="event-card-time">
-              <Clock size={11} />
-              <span>{timeStr}</span>
-            </span>
-          )}
+          <span className="event-card-datetime">{dateLine}</span>
+          <span className="event-card-category">{catLabel}</span>
         </div>
 
         <h3 className="event-card-title">{event.title}</h3>
 
-        {snippet && <p className="event-card-desc">{snippet}</p>}
-
         <div className="event-card-footer">
-          <div className="event-card-venue">
-            <MapPin size={13} />
-            <span>{locationText}</span>
-          </div>
-
-          <div className="event-card-actions">
-            <button
-              type="button"
-              className={`save-bookmark-btn ${isJoined ? 'saved' : ''}`}
-              title={isJoined ? 'Remove from Saved' : 'Save event'}
-              aria-label={isJoined ? 'Remove from Saved' : 'Save event'}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleJoin(event.id);
-              }}
-            >
-              <Bookmark
-                size={15}
-                fill={isJoined ? 'var(--accent)' : 'none'}
-                color={isJoined ? 'var(--accent)' : 'var(--text-secondary)'}
-              />
-            </button>
-            <span className="card-open-cue" aria-hidden="true">
-              <ArrowUpRight size={15} />
-            </span>
-          </div>
+          <span className="event-card-venue">{locationText}</span>
+          <span
+            className={`event-card-price ${
+              event.is_passed ? 'ended' : event.entrance_fee_etb > 0 ? 'paid' : 'free'
+            }`}
+          >
+            {priceText}
+          </span>
         </div>
       </div>
     </article>

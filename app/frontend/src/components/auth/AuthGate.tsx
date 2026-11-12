@@ -1,5 +1,5 @@
 import { SignIn } from '@clerk/react';
-import { Lock, Calendar, Ticket, Sparkles, ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 interface AuthGateProps {
   isClerkEnabled: boolean;
@@ -9,57 +9,49 @@ export function AuthGate({ isClerkEnabled }: AuthGateProps) {
   return (
     <div className="auth-gate-shell">
       <div className="auth-gate-container">
-        {/* Left Editorial Brand Showcase */}
+        {/* Left Editorial Masthead */}
         <div className="auth-gate-pitch">
           <div className="auth-gate-brand">
             <img src="/logo.png" alt="PAZA" className="auth-gate-logo" />
             <div>
               <div className="brand-wordmark">PAZA</div>
-              <div className="brand-city-tag">Addis Ababa</div>
+              <div className="brand-city-tag">ADDIS ABABA</div>
             </div>
           </div>
 
-          <div className="discovery-kicker" style={{ marginTop: '20px' }}>
-            <Lock size={13} />
-            <span>Protected Members Portal</span>
+          <div className="discovery-kicker" style={{ marginTop: '32px' }}>
+            <span>CITY CULTURAL DIRECTORY</span>
           </div>
 
           <h1 className="auth-gate-title">
-            Discover &amp; RSVP to Addis Ababa&apos;s Best Events.
+            What’s happening across Addis Ababa.
           </h1>
           <p className="auth-gate-subtitle">
-            Sign in with your PAZA account to browse live concerts, tech meetups, exhibitions,
-            RSVP for passes, and build custom invite cards.
+            An index of live music, exhibitions, screenings, and Independent gatherings—with direct RSVP passes and venue directories.
           </p>
 
-          <div className="auth-gate-features">
-            <div className="auth-gate-feature">
-              <div className="auth-feature-icon">
-                <Calendar size={16} />
-              </div>
-              <div>
-                <h4>Curated Live Discovery</h4>
-                <p>Filter upcoming and past city events across venues and categories.</p>
+          <div className="auth-gate-specs">
+            <div className="auth-spec-row">
+              <span className="auth-spec-num">01</span>
+              <div className="auth-spec-text">
+                <strong>Live Index</strong>
+                <span>Concerts, club nights, tech meetups, and gallery openings.</span>
               </div>
             </div>
 
-            <div className="auth-gate-feature">
-              <div className="auth-feature-icon">
-                <Ticket size={16} />
-              </div>
-              <div>
-                <h4>Verified Digital Passes</h4>
-                <p>Sync RSVPs, Telebirr/CBE receipts, and door entry tickets to your profile.</p>
+            <div className="auth-spec-row">
+              <span className="auth-spec-num">02</span>
+              <div className="auth-spec-text">
+                <strong>Direct Passes</strong>
+                <span>RSVP confirmation, Telebirr &amp; CBE receipt verification, and door codes.</span>
               </div>
             </div>
 
-            <div className="auth-gate-feature">
-              <div className="auth-feature-icon">
-                <Sparkles size={16} />
-              </div>
-              <div>
-                <h4>Custom Invite Cards</h4>
-                <p>Generate and share personalized event artwork with friends in one click.</p>
+            <div className="auth-spec-row">
+              <span className="auth-spec-num">03</span>
+              <div className="auth-spec-text">
+                <strong>Shared Shortlists</strong>
+                <span>Bookmark upcoming dates and generate custom event passes for friends.</span>
               </div>
             </div>
           </div>
@@ -72,24 +64,24 @@ export function AuthGate({ isClerkEnabled }: AuthGateProps) {
               routing="hash"
               appearance={{
                 variables: {
-                  colorPrimary: '#8BA888',
-                  colorPrimaryForeground: '#061006',
-                  colorBackground: '#101214',
-                  colorInput: '#070809',
-                  colorInputForeground: '#f3f4f6',
-                  colorForeground: '#f3f4f6',
-                  colorMutedForeground: '#a1a7b0',
-                  colorNeutral: '#f3f4f6',
-                  colorBorder: 'rgba(255, 255, 255, 0.14)',
-                  borderRadius: '12px',
+                  colorPrimary: '#f4f4f5',
+                  colorPrimaryForeground: '#09090b',
+                  colorBackground: '#111113',
+                  colorInput: '#09090b',
+                  colorInputForeground: '#f4f4f5',
+                  colorForeground: '#f4f4f5',
+                  colorMutedForeground: '#a1a1aa',
+                  colorNeutral: '#f4f4f5',
+                  colorBorder: 'rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
                   fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
                 },
                 elements: {
                   rootBox: { width: '100%' },
                   cardBox: {
                     width: '100%',
-                    boxShadow: '0 24px 70px rgba(0, 0, 0, 0.75)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    boxShadow: '0 24px 64px rgba(0, 0, 0, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
                   },
                 },
               }}
@@ -97,7 +89,7 @@ export function AuthGate({ isClerkEnabled }: AuthGateProps) {
           ) : (
             <div className="auth-misconfigured-card">
               <div className="empty-state-icon">
-                <ShieldAlert size={28} />
+                <ShieldAlert size={22} />
               </div>
               <h2>Authentication Not Configured</h2>
               <p>

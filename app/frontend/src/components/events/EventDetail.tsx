@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
-  Calendar,
-  Clock,
-  MapPin,
   Bookmark,
   Share2,
   Check,
@@ -26,6 +23,7 @@ import { OrganizerHeaderBadge } from './OrganizerHeaderBadge';
 import { RsvpPaymentModal } from './RsvpPaymentModal';
 import { openExternalUrl } from '../../utils/navigation';
 import { useAppAuth } from '../../auth/authContext';
+import { getEventPosterTheme } from '../../utils/theme';
 
 interface EventDetailProps {
   event: EventItem;
@@ -228,13 +226,13 @@ export function EventDetail({
       <div className="event-detail-nav">
         <div className="event-detail-nav-inner">
           <button type="button" className="detail-back-pill" onClick={onBack} title="Back to events">
-            <ArrowLeft size={16} />
-            <span>Back to Events</span>
+            <ArrowLeft size={15} />
+            <span>Directory</span>
           </button>
 
           <div className="detail-nav-actions">
             <button type="button" className="detail-nav-pill" onClick={handleShare} title="Invite & Share">
-              <Share2 size={15} />
+              <Share2 size={14} />
               <span className="detail-pill-text">Invite</span>
             </button>
 
@@ -245,9 +243,8 @@ export function EventDetail({
               title={isJoined ? 'Unsave event' : 'Save event'}
             >
               <Bookmark
-                size={15}
-                fill={isJoined ? 'var(--accent)' : 'none'}
-                color={isJoined ? 'var(--accent)' : 'var(--text-primary)'}
+                size={14}
+                fill={isJoined ? 'currentColor' : 'none'}
               />
               <span className="detail-pill-text">{isJoined ? 'Saved' : 'Save'}</span>
             </button>
@@ -260,7 +257,7 @@ export function EventDetail({
         <div className="detail-layout">
           {/* ── LEFT MAIN EDITORIAL COLUMN ── */}
           <div className="detail-main">
-            {hasImage && (
+            {hasImage ? (
               <div className="event-detail-hero">
                 <img
                   src={activeData.image_url}
@@ -268,18 +265,68 @@ export function EventDetail({
                   className="detail-hero-img"
                   onError={() => setHeroImgError(true)}
                 />
-                <div className="detail-hero-overlay" />
+              </div>
+            ) : (
+              <div
+                className="event-detail-hero-gradient"
+                style={{ background: getEventPosterTheme(activeData.id, activeData.title).gradient }}
+              >
+                <div
+                  className="poster-ambient-watermark"
+                  style={{ color: getEventPosterTheme(activeData.id, activeData.title).watermarkColor }}
+                  aria-hidden="true"
+                >
+                  {(activeData.category || 'P').charAt(0).toUpperCase()}
+                </div>
+                <div className="poster-top-bar">
+                  <span
+                    className="poster-cat-badge"
+                    style={{
+                      color: getEventPosterTheme(activeData.id, activeData.title).accent,
+                      backgroundColor: getEventPosterTheme(activeData.id, activeData.title).accentSoft,
+                      borderColor: getEventPosterTheme(activeData.id, activeData.title).border,
+                    }}
+                  >
+                    {activeData.category || 'Event'}
+                  </span>
+                  <span
+                    className="poster-date-badge"
+                    style={{
+                      color: getEventPosterTheme(activeData.id, activeData.title).accent,
+                      borderColor: getEventPosterTheme(activeData.id, activeData.title).border,
+                    }}
+                  >
+                    {dateString}
+                  </span>
+                </div>
+                <div className="poster-headline-wrap">
+                  <h2 className="poster-detail-headline">{activeData.title}</h2>
+                </div>
+                <div className="poster-bottom-bar">
+                  <span className="poster-venue-text">
+                    {activeData.venue_name || 'Addis Ababa'}
+                  </span>
+                  {timeString && (
+                    <span
+                      className="poster-time-text"
+                      style={{ color: getEventPosterTheme(activeData.id, activeData.title).accent }}
+                    >
+                      {timeString}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
             <div className="detail-header-block">
               <div className="detail-badge-row">
                 <span className="detail-category-badge">{activeData.category}</span>
+                <span className="meta-sep">/</span>
                 {activeData.is_passed ? (
-                  <span className="event-row-badge ended">ENDED</span>
+                  <span className="detail-status-tag ended">Ended</span>
                 ) : (
-                  <span className={`event-row-badge ${activeData.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
-                    {activeData.entrance_fee_etb > 0 ? `${activeData.entrance_fee_etb} ETB` : 'FREE ENTRY'}
+                  <span className={`detail-status-tag ${activeData.entrance_fee_etb > 0 ? 'paid' : 'free'}`}>
+                    {activeData.entrance_fee_etb > 0 ? `${activeData.entrance_fee_etb.toLocaleString()} ETB` : 'Free Entry'}
                   </span>
                 )}
               </div>
@@ -287,56 +334,52 @@ export function EventDetail({
               <h1 className="detail-title">{activeData.title}</h1>
             </div>
 
-            {/* Mobile Meta Grid (Desktop shows rich schedule card in right sidebar too) */}
-            <div className="detail-meta-grid mobile-only-meta">
-              <div className="meta-card">
-                <div className="meta-card-icon">
-                  <Calendar size={18} />
-                </div>
-                <div className="meta-card-text">
-                  <h4>{dateString}</h4>
-                  {timeString && (
-                    <p>
-                      <Clock size={12} /> {timeString}
-                    </p>
-                  )}
+            {/* Clean Architectural Key-Facts Strip (replaces double-boxed icon cards) */}
+            <div className="detail-facts-sheet">
+              <div className="detail-fact-row">
+                <span className="detail-fact-label">Date &amp; Time</span>
+                <div className="detail-fact-value">
+                  <strong>{dateString}</strong>
+                  {timeString && <span className="detail-fact-sub">{timeString}</span>}
                 </div>
               </div>
 
-              <div className="meta-card meta-card-location">
-                <div className="meta-card-icon">
-                  <MapPin size={18} />
+              <div className="detail-fact-row">
+                <span className="detail-fact-label">Location</span>
+                <div className="detail-fact-value detail-fact-location">
+                  <div>
+                    <strong>{activeData.venue_name || 'Addis Ababa'}</strong>
+                    <span className="detail-fact-sub">
+                      {activeData.sub_city ? `${activeData.sub_city}, Addis Ababa` : 'Addis Ababa, Ethiopia'}
+                    </span>
+                  </div>
+                  <a
+                    href={mapsSearchUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="maps-link-btn"
+                    title="Open in Google Maps"
+                  >
+                    <span>Map</span>
+                    <ExternalLink size={12} />
+                  </a>
                 </div>
-                <div className="meta-card-text">
-                  <h4>{activeData.venue_name || 'Addis Ababa'}</h4>
-                  <p>{activeData.sub_city ? `${activeData.sub_city}, Addis Ababa` : 'Ethiopia'}</p>
-                </div>
-                <a
-                  href={mapsSearchUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="maps-link-btn"
-                  title="Open in Google Maps"
-                >
-                  <span>Maps</span>
-                  <ExternalLink size={13} />
-                </a>
               </div>
             </div>
 
             {/* About Section */}
-            <section className="detail-section-card">
-              <h2 className="section-heading">About This Event</h2>
+            <section className="detail-section-block">
+              <h2 className="section-heading">Overview</h2>
               <p className="detail-description">
                 {fullDetail?.description || activeData?.description || 'Event happening in Addis Ababa.'}
               </p>
             </section>
 
             {/* Map Panel */}
-            <section className="detail-section-card map-card-panel">
+            <section className="detail-section-block map-card-panel">
               <div className="map-card-header">
                 <div>
-                  <h2 className="section-heading">Venue Location</h2>
+                  <h2 className="section-heading">Venue Map</h2>
                   <p className="map-card-subtitle">{venueQuery}</p>
                 </div>
                 <a
@@ -346,8 +389,8 @@ export function EventDetail({
                   className="maps-link-btn"
                   title="Open in Google Maps"
                 >
-                  <span>Open Maps</span>
-                  <ExternalLink size={13} />
+                  <span>Google Maps</span>
+                  <ExternalLink size={12} />
                 </a>
               </div>
 
@@ -362,7 +405,7 @@ export function EventDetail({
               </div>
             </section>
 
-            {/* Social Source Button */}
+            {/* Social Source Link */}
             {postUrl && (
               <div className="social-source-container">
                 <a
@@ -371,7 +414,7 @@ export function EventDetail({
                     e.preventDefault();
                     openExternalUrl(postUrl);
                   }}
-                  className={`social-source-btn ${platformType}`}
+                  className="social-source-btn"
                   title={`View original post on ${
                     platformType === 'instagram'
                       ? 'Instagram'
@@ -382,37 +425,17 @@ export function EventDetail({
                       : 'Source'
                   }`}
                 >
-                  <div className="social-source-circle">
-                    {platformType === 'instagram' && (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-                      </svg>
-                    )}
-                    {platformType === 'telegram' && (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.37.74-.56 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
-                      </svg>
-                    )}
-                    {platformType === 'tiktok' && (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64c.29 0 .56.04.83.12V9.37a6.33 6.33 0 00-1-.08A6.26 6.26 0 003 15.55a6.26 6.26 0 0010.71 4.41h.01V12.1c1.55 1.1 3.41 1.75 5.43 1.75v-3.76a4.85 4.85 0 01-3.56-3.4z" />
-                      </svg>
-                    )}
-                    {platformType === 'web' && <ExternalLink size={18} />}
-                  </div>
-                  <span className="social-source-label">
-                    View original post on{' '}
+                  <span className="social-source-platform">
                     {platformType === 'instagram'
-                      ? 'Instagram'
+                      ? 'INSTAGRAM'
                       : platformType === 'telegram'
-                      ? 'Telegram'
+                      ? 'TELEGRAM'
                       : platformType === 'tiktok'
-                      ? 'TikTok'
-                      : 'Source'}
+                      ? 'TIKTOK'
+                      : 'SOURCE'}
                   </span>
-                  <ExternalLink size={14} className="social-source-arrow" />
+                  <span className="social-source-label">View original event listing</span>
+                  <ExternalLink size={13} className="social-source-arrow" />
                 </a>
               </div>
             )}
@@ -426,13 +449,15 @@ export function EventDetail({
                 <div>
                   <span className="dock-price-label">Admission</span>
                   <div className="detail-sidebar-price">
-                    {activeData.entrance_fee_etb > 0 ? `${activeData.entrance_fee_etb} ETB` : 'FREE'}
+                    {activeData.entrance_fee_etb > 0
+                      ? `${activeData.entrance_fee_etb.toLocaleString()} ETB`
+                      : 'Free'}
                   </div>
                 </div>
                 {activeData.is_passed ? (
-                  <span className="event-row-badge ended">Concluded</span>
+                  <span className="detail-live-pill ended">Past</span>
                 ) : (
-                  <span className="detail-live-pill">Open RSVP</span>
+                  <span className="detail-live-pill">Registration Open</span>
                 )}
               </div>
 
@@ -444,21 +469,21 @@ export function EventDetail({
               >
                 {isGoing ? (
                   <>
-                    <Check size={17} />
-                    <span>Going (Tap to Cancel)</span>
+                    <Check size={15} />
+                    <span>Going · Cancel RSVP</span>
                   </>
                 ) : (
                   <>
-                    <UserPlus size={17} />
-                    <span>I'm Going — RSVP</span>
+                    <UserPlus size={15} />
+                    <span>RSVP for Event</span>
                   </>
                 )}
               </button>
 
               <div className="sidebar-secondary-actions">
                 <button type="button" className="sidebar-ghost-btn" onClick={handleShare}>
-                  <Share2 size={15} />
-                  <span>Invite Friends</span>
+                  <Share2 size={14} />
+                  <span>Invite Card</span>
                 </button>
                 <button
                   type="button"
@@ -466,42 +491,11 @@ export function EventDetail({
                   onClick={() => onToggleJoin(activeData.id)}
                 >
                   <Bookmark
-                    size={15}
-                    fill={isJoined ? 'var(--accent)' : 'none'}
-                    color={isJoined ? 'var(--accent)' : 'currentColor'}
+                    size={14}
+                    fill={isJoined ? 'currentColor' : 'none'}
                   />
-                  <span>{isJoined ? 'Saved' : 'Save'}</span>
+                  <span>{isJoined ? 'Saved' : 'Bookmark'}</span>
                 </button>
-              </div>
-            </div>
-
-            {/* Desktop Schedule & Venue Summary Card */}
-            <div className="detail-sidebar-card desktop-only-meta">
-              <h3 className="sidebar-card-title">Date & Location</h3>
-              <div className="detail-meta-grid">
-                <div className="meta-card">
-                  <div className="meta-card-icon">
-                    <Calendar size={18} />
-                  </div>
-                  <div className="meta-card-text">
-                    <h4>{dateString}</h4>
-                    {timeString && (
-                      <p>
-                        <Clock size={12} /> {timeString}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="meta-card meta-card-location">
-                  <div className="meta-card-icon">
-                    <MapPin size={18} />
-                  </div>
-                  <div className="meta-card-text">
-                    <h4>{activeData.venue_name || 'Addis Ababa'}</h4>
-                    <p>{activeData.sub_city ? `${activeData.sub_city}, Addis Ababa` : 'Ethiopia'}</p>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -520,13 +514,13 @@ export function EventDetail({
 
                 {activeData.is_organizer_verified ? (
                   <div className="organizer-status-note verified">
-                    <ShieldCheck size={14} />
-                    <span>Verified PAZA Organizer</span>
+                    <ShieldCheck size={13} />
+                    <span>Verified Host</span>
                   </div>
                 ) : (
                   <div className="organizer-status-note unverified">
-                    <AlertTriangle size={14} />
-                    <span>Organizer not verified — confirm payment details carefully</span>
+                    <AlertTriangle size={13} />
+                    <span>Unverified host — confirm payment details before transfer</span>
                   </div>
                 )}
               </div>
@@ -546,19 +540,16 @@ export function EventDetail({
               }}
             >
               <div className="attendees-card-top">
-                <h3 className="sidebar-card-title">Who's Going</h3>
+                <h3 className="sidebar-card-title">Guestlist</h3>
                 <span className="attendees-view-link">
-                  <Users size={13} />
-                  View list
+                  <Users size={12} />
+                  <span>View all</span>
                 </span>
               </div>
 
               <div className="going-section">
                 {isLoadingDetail ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div className="dot-loader" />
-                    <span className="going-count">Loading attendees...</span>
-                  </div>
+                  <span className="going-count empty">Loading guestlist...</span>
                 ) : rsvps.length > 0 ? (
                   <>
                     <div className="avatar-stack">
@@ -589,18 +580,18 @@ export function EventDetail({
                       )}
                     </div>
                     <span className="going-count">
-                      {rsvps.length} {rsvps.length === 1 ? 'person' : 'people'} going
+                      {rsvps.length} {rsvps.length === 1 ? 'attending' : 'attending'}
                     </span>
                   </>
                 ) : (
-                  <span className="going-count empty">Be the first to RSVP!</span>
+                  <span className="going-count empty">No public RSVPs yet</span>
                 )}
               </div>
             </div>
           </aside>
         </div>
 
-        {copied && <div className="detail-toast">Link copied to clipboard!</div>}
+        {copied && <div className="detail-toast">Link copied to clipboard</div>}
       </div>
 
       {/* ── Mobile Sticky Bottom Action Dock ── */}

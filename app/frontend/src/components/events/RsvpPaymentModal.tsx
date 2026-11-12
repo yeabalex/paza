@@ -179,57 +179,55 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
 
     return (
       <div className="going-modal-backdrop" onClick={onClose}>
-        <div className="going-modal-content" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center', padding: '24px 20px' }}>
+        <div className="going-modal-content" onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center', padding: '24px 22px' }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button type="button" className="going-modal-close" onClick={onClose}>
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
 
-          <div style={{ margin: '8px 0 12px 0', fontSize: '40px' }}>🎟️</div>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '8px',
+              background: 'var(--accent-soft)',
+              border: '1px solid var(--border-accent)',
+              color: 'var(--accent-bright)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '4px auto 14px',
+            }}
+          >
+            <Check size={20} />
+          </div>
 
-          <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 700, color: '#ffffff' }}>
-            RSVP Confirmed!
+          <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            RSVP Confirmed
           </h3>
 
-          <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: 'var(--text-muted)' }}>
-            You're marked as Going to <strong>{event.title}</strong>
+          <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            You are registered for <strong style={{ color: 'var(--text-primary)' }}>{event.title}</strong>
           </p>
 
           {postUrl && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '20px', padding: '14px', background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginBottom: '20px', padding: '14px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
               <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                Want to check direct updates from the host?
+                Check direct updates from the host:
               </span>
               <a
                 href={postUrl}
                 onClick={handleOpenLink}
-                className={`social-source-btn ${platformType}`}
-                style={{ marginTop: '4px' }}
+                className="social-source-btn"
               >
-                <div className="social-source-circle">
-                  {platformType === 'instagram' && (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-                    </svg>
-                  )}
-                  {platformType === 'telegram' && (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.37.74-.56 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
-                    </svg>
-                  )}
-                  {platformType === 'tiktok' && (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64c.29 0 .56.04.83.12V9.37a6.33 6.33 0 00-1-.08A6.26 6.26 0 003 15.55a6.26 6.26 0 0010.71 4.41h.01V12.1c1.55 1.1 3.41 1.75 5.43 1.75v-3.76a4.85 4.85 0 01-3.56-3.4z"/>
-                    </svg>
-                  )}
-                  {platformType === 'web' && <ExternalLink size={18} />}
-                </div>
-                <span className="social-source-label">
-                  View on {platformType === 'instagram' ? 'Instagram' : platformType === 'telegram' ? 'Telegram' : platformType === 'tiktok' ? 'TikTok' : 'Original Post'}
+                <span className="social-source-platform">
+                  {platformType.toUpperCase()}
                 </span>
+                <span className="social-source-label">
+                  Open original post
+                </span>
+                <ExternalLink size={12} className="social-source-arrow" />
               </a>
             </div>
           )}
@@ -239,13 +237,13 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
             onClick={onClose}
             style={{
               width: '100%',
-              padding: '12px',
-              borderRadius: '10px',
-              background: 'var(--accent)',
+              padding: '11px',
+              borderRadius: '6px',
+              background: 'var(--text-primary)',
               border: 'none',
-              color: '#0f172a',
-              fontSize: '14px',
-              fontWeight: 700,
+              color: 'var(--bg-primary)',
+              fontSize: '13px',
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
@@ -262,19 +260,19 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
         {/* Header */}
         <div className="going-modal-header">
           <div>
-            <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>
-              {isPaid ? 'Event RSVP & Payment' : 'Confirm RSVP'}
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+              {isPaid ? 'RSVP & Payment' : 'Confirm RSVP'}
             </h3>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               {event.title}
             </span>
           </div>
           <button type="button" className="going-modal-close" onClick={onClose}>
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '14px' }}>
           {/* Price Header Banner */}
           <div
             style={{
@@ -282,17 +280,18 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 14px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              borderRadius: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'var(--bg-primary)',
+              borderRadius: '6px',
+              border: '1px solid var(--border-subtle)',
             }}
           >
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Entrance Fee:</span>
+            <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>Admission</span>
             <span
               style={{
-                fontSize: '15px',
-                fontWeight: 700,
-                color: isPaid ? '#ef4444' : (event.entrance_fee_etb || 0) > 0 ? '#f59e0b' : '#22c55e',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: (event.entrance_fee_etb || 0) > 0 ? 'var(--color-paid)' : 'var(--accent-bright)',
               }}
             >
               {(event.entrance_fee_etb || 0) > 0 ? `${event.entrance_fee_etb} ETB` : 'FREE'}
@@ -302,32 +301,32 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
           {isScraped && (
             <div
               style={{
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                background: 'rgba(255, 255, 255, 0.03)',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
-                lineHeight: '1.4',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                background: 'var(--bg-primary)',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-subtle)',
+                lineHeight: '1.45',
               }}
             >
-              ℹ️ Explore event from social media. Registration & entrance fee (if paid) are managed directly with event organizers at the venue.
+              Directory listing from social media. Entrance fees (if applicable) are handled directly at the venue.
             </div>
           )}
 
           {/* Organizer Payout Account Information (if paid or accounts configured) */}
           {isPaid && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Organizer Payment Accounts
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                Transfer Accounts
               </span>
 
               {isLoading ? (
                 <div
                   style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '6px',
                     padding: '14px',
                     textAlign: 'center',
                     fontSize: '12px',
@@ -339,113 +338,115 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
               ) : (
                 <>
                   {/* Telebirr Account Details */}
-              {event.telebirr_phone && (
-                <div
-                  style={{
-                    background: 'rgba(37, 99, 235, 0.08)',
-                    border: '1px solid rgba(37, 99, 235, 0.25)',
-                    borderRadius: '10px',
-                    padding: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CreditCard size={14} /> Telebirr
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(event.telebirr_phone!, 'telebirr')}
+                  {event.telebirr_phone && (
+                    <div
                       style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: copiedField === 'telebirr' ? '#4ade80' : '#60a5fa',
-                        fontSize: '11px',
-                        cursor: 'pointer',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: '6px',
+                        padding: '12px',
                         display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontWeight: 600,
+                        flexDirection: 'column',
+                        gap: '6px',
                       }}
                     >
-                      {copiedField === 'telebirr' ? <Check size={13} /> : <Copy size={13} />}
-                      {copiedField === 'telebirr' ? 'Copied' : 'Copy Number'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.5px', color: '#ffffff' }}>
-                    {event.telebirr_phone}
-                  </div>
-                  {event.telebirr_name && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Account Name: <strong style={{ color: '#ffffff' }}>{event.telebirr_name}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11.5px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CreditCard size={13} /> TELEBIRR
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(event.telebirr_phone!, 'telebirr')}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: copiedField === 'telebirr' ? 'var(--accent-bright)' : 'var(--text-primary)',
+                            fontSize: '11px',
+                            fontFamily: 'var(--font-mono)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {copiedField === 'telebirr' ? <Check size={12} /> : <Copy size={12} />}
+                          {copiedField === 'telebirr' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '15px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {event.telebirr_phone}
+                      </div>
+                      {event.telebirr_name && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          Account: <strong style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{event.telebirr_name}</strong>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* CBE Account Details */}
-              {event.cbe_account && (
-                <div
-                  style={{
-                    background: 'rgba(147, 51, 234, 0.08)',
-                    border: '1px solid rgba(147, 51, 234, 0.25)',
-                    borderRadius: '10px',
-                    padding: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#c084fc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CreditCard size={14} /> Commercial Bank of Ethiopia (CBE)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(event.cbe_account!, 'cbe')}
+                  {/* CBE Account Details */}
+                  {event.cbe_account && (
+                    <div
                       style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: copiedField === 'cbe' ? '#4ade80' : '#c084fc',
-                        fontSize: '11px',
-                        cursor: 'pointer',
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border-medium)',
+                        borderRadius: '6px',
+                        padding: '12px',
                         display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontWeight: 600,
+                        flexDirection: 'column',
+                        gap: '6px',
                       }}
                     >
-                      {copiedField === 'cbe' ? <Check size={13} /> : <Copy size={13} />}
-                      {copiedField === 'cbe' ? 'Copied' : 'Copy Account'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.5px', color: '#ffffff' }}>
-                    {event.cbe_account}
-                  </div>
-                  {event.cbe_name && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Account Name: <strong style={{ color: '#ffffff' }}>{event.cbe_name}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11.5px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CreditCard size={13} /> CBE BANK
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(event.cbe_account!, 'cbe')}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: copiedField === 'cbe' ? 'var(--accent-bright)' : 'var(--text-primary)',
+                            fontSize: '11px',
+                            fontFamily: 'var(--font-mono)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {copiedField === 'cbe' ? <Check size={12} /> : <Copy size={12} />}
+                          {copiedField === 'cbe' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '15px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {event.cbe_account}
+                      </div>
+                      {event.cbe_name && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          Account: <strong style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{event.cbe_name}</strong>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
 
-              {!hasPaymentAccounts && (
-                <div
-                  style={{
-                    fontSize: '12px',
-                    color: '#f59e0b',
-                    padding: '10px',
-                    background: 'rgba(245, 158, 11, 0.08)',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(245, 158, 11, 0.2)',
-                  }}
-                >
-                  Contact organizer (@{event.organizer_username || event.organizer_name || 'organizer'}) for direct payment instructions.
-                </div>
-              )}
+                  {!hasPaymentAccounts && (
+                    <div
+                      style={{
+                        fontSize: '12px',
+                        color: 'var(--color-paid)',
+                        padding: '10px 12px',
+                        background: 'var(--color-paid-bg)',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(214, 180, 133, 0.25)',
+                      }}
+                    >
+                      Contact organizer (@{event.organizer_username || event.organizer_name || 'organizer'}) for payment details.
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -454,11 +455,11 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
           {/* Form Fields */}
           {/* 1. Full Name */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Full Name <span style={{ color: '#ef4444' }}>*</span>
+            <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+              Full Name
             </label>
             <div style={{ position: 'relative' }}>
-              <User size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <User size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 required
@@ -468,10 +469,10 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                 style={{
                   width: '100%',
                   padding: '10px 12px 10px 36px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  borderRadius: '8px',
-                  color: '#ffffff',
+                  background: 'var(--bg-primary)',
+                  border: '1px solid var(--border-medium)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
                   fontSize: '13px',
                   outline: 'none',
                 }}
@@ -482,8 +483,8 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
           {/* 2. Payment Method Selector (if paid) */}
           {isPaid && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Payment Method Used
+              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                Payment Method
               </label>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {(['Telebirr', 'CBE', 'Other'] as const).map((method) => (
@@ -494,12 +495,12 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                     style={{
                       flex: 1,
                       padding: '8px 4px',
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       fontSize: '12px',
-                      fontWeight: 600,
-                      border: paymentMethod === method ? '1px solid var(--accent)' : '1px solid rgba(255, 255, 255, 0.1)',
-                      background: paymentMethod === method ? 'rgba(139, 168, 136, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                      color: paymentMethod === method ? '#ffffff' : 'var(--text-muted)',
+                      fontWeight: 500,
+                      border: paymentMethod === method ? '1px solid var(--text-primary)' : '1px solid var(--border-subtle)',
+                      background: paymentMethod === method ? 'var(--bg-elevated)' : 'var(--bg-primary)',
+                      color: paymentMethod === method ? 'var(--text-primary)' : 'var(--text-muted)',
                       cursor: 'pointer',
                     }}
                   >
@@ -513,24 +514,25 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
           {/* 3. Transaction ID (if paid) */}
           {isPaid && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Transaction Reference / ID
+              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                Transaction Reference
               </label>
               <div style={{ position: 'relative' }}>
-                <FileText size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <FileText size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
                   value={transactionId}
                   onChange={(e) => setTransactionId(e.target.value)}
-                  placeholder="e.g. FT240810XXXX or Txn Ref"
+                  placeholder="e.g. FT240810XXXX"
                   style={{
                     width: '100%',
                     padding: '10px 12px 10px 36px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    borderRadius: '8px',
-                    color: '#ffffff',
-                    fontSize: '13px',
+                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: '6px',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '12.5px',
                     outline: 'none',
                   }}
                 />
@@ -541,17 +543,17 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
           {/* 4. Receipt / Screenshot Attachment (Organizer Events Only) */}
           {!isScraped && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                {isPaid ? 'Attach Payment Receipt Screenshot' : 'Attach File/Photo (Optional)'}
+              <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                {isPaid ? 'Payment Receipt Screenshot' : 'Attachment (Optional)'}
               </label>
 
               {screenshotUrl ? (
                 <div
                   style={{
                     position: 'relative',
-                    borderRadius: '10px',
+                    borderRadius: '6px',
                     overflow: 'hidden',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    border: '1px solid var(--border-medium)',
                     maxHeight: '140px',
                   }}
                 >
@@ -570,12 +572,12 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                       position: 'absolute',
                       top: '8px',
                       right: '8px',
-                      background: 'rgba(0, 0, 0, 0.75)',
-                      border: 'none',
-                      borderRadius: '50%',
+                      background: 'rgba(9, 9, 11, 0.8)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '4px',
                       width: '26px',
                       height: '26px',
-                      color: '#ffffff',
+                      color: 'var(--text-primary)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -584,7 +586,7 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                   >
                     <X size={14} />
                   </button>
-                  <div style={{ position: 'absolute', bottom: '6px', left: '8px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', color: '#ffffff' }}>
+                  <div style={{ position: 'absolute', bottom: '6px', left: '8px', background: 'rgba(9,9,11,0.85)', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', color: 'var(--text-primary)' }}>
                     {screenshotName || 'Attached Screenshot'}
                   </div>
                 </div>
@@ -599,20 +601,20 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
                     justifyContent: 'center',
                     gap: '6px',
                     padding: '16px',
-                    border: '2px dashed rgba(255, 255, 255, 0.15)',
-                    borderRadius: '10px',
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px dashed var(--border-medium)',
+                    borderRadius: '6px',
+                    background: 'var(--bg-primary)',
                     cursor: 'pointer',
                     textAlign: 'center',
                     overflow: 'hidden',
                   }}
                 >
-                  <Upload size={20} style={{ color: 'var(--accent)' }} />
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#ffffff' }}>
-                    {isUploading ? 'Uploading receipt screenshot...' : 'Click to upload receipt screenshot'}
+                  <Upload size={18} style={{ color: 'var(--text-secondary)' }} />
+                  <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {isUploading ? 'Uploading receipt...' : 'Upload receipt screenshot'}
                   </span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    {isUploading ? 'Please wait a moment' : 'PNG, JPG up to 10MB'}
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {isUploading ? 'Please wait' : 'PNG, JPG up to 10MB'}
                   </span>
                   <input
                     id="rsvp-receipt-upload"
@@ -637,22 +639,22 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
 
           {/* 5. Message / Note */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Note / Message (Optional)
+            <label style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+              Note (Optional)
             </label>
             <input
               type="text"
               maxLength={140}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="e.g. Can't wait! / Reserved 2 seats"
+              placeholder="Optional note for the host"
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: '8px',
-                color: '#ffffff',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-medium)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
                 fontSize: '13px',
                 outline: 'none',
               }}
@@ -660,25 +662,25 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
           </div>
 
           {errorMsg && (
-            <div style={{ fontSize: '12px', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '8px 12px', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: '#f87171', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 12px', borderRadius: '6px' }}>
               {errorMsg}
             </div>
           )}
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
             <button
               type="button"
               onClick={onClose}
               style={{
                 flex: 1,
-                padding: '12px',
-                borderRadius: '10px',
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: '#ffffff',
+                padding: '11px',
+                borderRadius: '6px',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
                 fontSize: '13px',
-                fontWeight: 600,
+                fontWeight: 500,
                 cursor: 'pointer',
               }}
             >
@@ -690,15 +692,15 @@ export const RsvpPaymentModal: React.FC<RsvpPaymentModalProps> = ({
               disabled={isSubmitting || isUploading}
               style={{
                 flex: 2,
-                padding: '12px',
-                borderRadius: '10px',
-                background: 'var(--accent)',
+                padding: '11px',
+                borderRadius: '6px',
+                background: 'var(--text-primary)',
                 border: 'none',
-                color: '#0f172a',
+                color: 'var(--bg-primary)',
                 fontSize: '13px',
-                fontWeight: 700,
+                fontWeight: 600,
                 cursor: 'pointer',
-                opacity: isSubmitting ? 0.7 : 1,
+                opacity: isSubmitting ? 0.6 : 1,
               }}
             >
               {isSubmitting ? 'Submitting...' : 'Confirm RSVP'}

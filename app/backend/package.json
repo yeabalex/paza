@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "python3 -m uvicorn app.main:app --reload --port 8000",
-    "dev:pipeline": "python3 run_pipeline_gateway.py",
-    "test": "pytest",
-    "lint": "python3 -m compileall app/",
-    "build": "python3 -m compileall app/"
+    "dev": "[ -d .venv ] && .venv/bin/uvicorn app.main:app --reload --port 8000 || python3 -m uvicorn app.main:app --reload --port 8000",
+    "dev:pipeline": "[ -d .venv ] && .venv/bin/python3 run_pipeline_gateway.py || python3 run_pipeline_gateway.py",
+    "test": "[ -d .venv ] && .venv/bin/pytest || pytest",
+    "lint": "[ -d .venv ] && .venv/bin/python3 -m compileall app/ || python3 -m compileall app/",
+    "build": "[ -d .venv ] && .venv/bin/python3 -m compileall app/ || python3 -m compileall app/"
   }
 }

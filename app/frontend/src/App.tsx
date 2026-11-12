@@ -506,20 +506,18 @@ export function App() {
           {activeTab === 'tickets' ? (
             <section className="page-header-block">
               <div>
-                <div className="discovery-kicker">Your Passes</div>
-                <h1 className="page-hero-title">My RSVPs</h1>
-                <p className="page-hero-subtitle">Events you have confirmed attendance or uploaded tickets for.</p>
+                <div className="discovery-kicker">PASSES &amp; RSVPS</div>
+                <h1 className="page-hero-title">Your RSVPs</h1>
               </div>
               <div className="header-stat-pill">
-                <span>{events.length} {events.length === 1 ? 'RSVP' : 'RSVPs'}</span>
+                <span>{events.length} {events.length === 1 ? 'event' : 'events'}</span>
               </div>
             </section>
           ) : activeTab === 'saved' ? (
             <section className="page-header-block">
               <div>
-                <div className="discovery-kicker">Bookmarks</div>
+                <div className="discovery-kicker">SHORTLIST</div>
                 <h1 className="page-hero-title">Saved Events</h1>
-                <p className="page-hero-subtitle">Shortlisted events saved across your sessions.</p>
               </div>
               <div className="header-stat-pill">
                 <span>{events.length} saved</span>
@@ -529,15 +527,11 @@ export function App() {
             <section className="page-header-block">
               <div>
                 <div className="discovery-kicker">
-                  <span className="kicker-dot" />
-                  <span>Addis Ababa · Event Discovery</span>
+                  <span>ADDIS ABABA / DIRECTORY</span>
                 </div>
                 <h1 className="page-hero-title">
-                  {timeframe === 'past' ? 'Past Events' : 'Explore Events'}
+                  {timeframe === 'past' ? 'Past Archive' : 'Upcoming Events'}
                 </h1>
-                <p className="page-hero-subtitle">
-                  Concerts, tech meetups, art exhibitions &amp; nightlife happening across Addis Ababa.
-                </p>
               </div>
 
               <div className="timeframe-switch" role="group" aria-label="Event timeframe">
@@ -555,7 +549,7 @@ export function App() {
                   onClick={() => setTimeframe('past')}
                   aria-pressed={timeframe === 'past'}
                 >
-                  Past
+                  Archive
                 </button>
               </div>
             </section>

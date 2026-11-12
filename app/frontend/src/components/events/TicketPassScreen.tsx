@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fetchVerifyTicket, type TicketVerificationResult } from '../../api/events';
-import { CheckCircle2, XCircle, ShieldCheck, Ticket, User, MapPin } from 'lucide-react';
+import { Check, X, ShieldCheck } from 'lucide-react';
 
 interface TicketPassScreenProps {
   eventId: string;
@@ -35,125 +35,120 @@ export const TicketPassScreen: React.FC<TicketPassScreenProps> = ({ eventId, tic
     >
       <div
         style={{
-          maxWidth: '440px',
+          maxWidth: '420px',
           width: '100%',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-medium)',
-          borderRadius: '24px',
-          padding: '32px 28px',
-          textAlign: 'center',
+          borderRadius: '10px',
+          padding: '28px 24px',
           boxShadow: 'var(--shadow-dialog)',
         }}
       >
-        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
-          <img
-            src="/logo.png"
-            alt="PAZA Logo"
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingBottom: '16px',
+            borderBottom: '1px solid var(--border-subtle)',
+            marginBottom: '20px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/logo.png" alt="PAZA" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em' }}>
+              PAZA / PASS
+            </span>
+          </div>
+          <span
             style={{
-              width: '84px',
-              height: '84px',
-              objectFit: 'contain',
-              background: 'transparent',
-              filter: 'drop-shadow(0 6px 16px rgba(0, 0, 0, 0.4))',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: result?.valid ? 'var(--accent-bright)' : 'var(--text-muted)',
+              textTransform: 'uppercase',
             }}
-          />
+          >
+            {loading ? 'VERIFYING...' : result?.valid ? 'VALIDATED' : 'INVALID'}
+          </span>
         </div>
 
         {loading ? (
-          <div style={{ padding: '40px 0' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Verifying Ticket Pass...</p>
+          <div style={{ padding: '40px 0', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
+              Verifying pass...
+            </p>
           </div>
         ) : result?.valid ? (
           <>
-            {/* Header Icon */}
-            <div
-              style={{
-                width: '72px',
-                height: '72px',
-                borderRadius: '50%',
-                background: 'rgba(34, 197, 94, 0.15)',
-                border: '2px solid #22c55e',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px',
-                color: '#22c55e',
-                boxShadow: '0 0 24px rgba(34, 197, 94, 0.3)',
-              }}
-            >
-              <CheckCircle2 size={40} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '6px',
+                  background: 'var(--accent-soft)',
+                  border: '1px solid var(--border-accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--accent-bright)',
+                  flexShrink: 0,
+                }}
+              >
+                <Check size={18} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.02em' }}>
+                  Entry Confirmed
+                </h2>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                  Present this pass at the door
+                </p>
+              </div>
             </div>
 
-            <span
-              style={{
-                background: 'rgba(34, 197, 94, 0.2)',
-                color: '#4ade80',
-                fontSize: '11px',
-                fontWeight: 800,
-                letterSpacing: '1px',
-                padding: '6px 14px',
-                borderRadius: '20px',
-                textTransform: 'uppercase',
-                display: 'inline-block',
-                marginBottom: '12px',
-              }}
-            >
-              OFFICIAL ENTRY PASS
-            </span>
-
-            <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#ffffff', margin: '0 0 4px', letterSpacing: '-0.5px' }}>
-              ATTENDANCE CONFIRMED
-            </h2>
-            <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 24px' }}>
-              Present this pass at the door for entry verification
-            </p>
-
-            {/* Ticket Card Details */}
+            {/* Ticket Specification Table */}
             <div
               style={{
-                background: 'rgba(0, 0, 0, 0.3)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '16px',
-                padding: '18px',
-                textAlign: 'left',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '16px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '14px',
-                marginBottom: '24px',
+                marginBottom: '20px',
               }}
             >
               <div>
-                <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600, display: 'block', marginBottom: '3px' }}>
+                <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '4px' }}>
                   Event
                 </span>
-                <span style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Ticket size={16} style={{ color: 'var(--accent)' }} />
+                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
                   {result.event_title}
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600, display: 'block', marginBottom: '3px' }}>
-                    Attendee
+                  <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '4px' }}>
+                    Guest
                   </span>
-                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <User size={14} style={{ color: '#60a5fa' }} />
+                  <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)', display: 'block' }}>
                     {result.attendee_name}
                   </span>
                   {result.username && (
-                    <span style={{ fontSize: '12px', color: '#60a5fa', display: 'block', marginTop: '2px' }}>
+                    <span style={{ fontSize: '11.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
                       @{result.username}
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <span style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600, display: 'block', marginBottom: '3px' }}>
+                  <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '4px' }}>
                     Venue
                   </span>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <MapPin size={14} style={{ color: '#f59e0b' }} />
+                  <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block' }}>
                     {result.venue_name}
                   </span>
                 </div>
@@ -162,54 +157,54 @@ export const TicketPassScreen: React.FC<TicketPassScreenProps> = ({ eventId, tic
               {/* Code Box */}
               <div
                 style={{
-                  background: 'rgba(34, 197, 94, 0.08)',
-                  border: '1px dashed rgba(34, 197, 94, 0.4)',
-                  borderRadius: '12px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-medium)',
+                  borderRadius: '6px',
                   padding: '12px',
                   textAlign: 'center',
-                  marginTop: '4px',
+                  marginTop: '2px',
                 }}
               >
-                <span style={{ fontSize: '11px', color: '#4ade80', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  Door Verification Code
+                <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '4px' }}>
+                  Verification Code
                 </span>
-                <span style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '3px', color: '#ffffff' }}>
+                <span style={{ fontSize: '20px', fontWeight: 600, fontFamily: 'var(--font-mono)', letterSpacing: '0.15em', color: 'var(--text-primary)' }}>
                   {result.ticket_code}
                 </span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', color: '#4ade80' }}>
-              <ShieldCheck size={16} />
-              <span>Verified System Authentication Pass</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11.5px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+              <ShieldCheck size={14} style={{ color: 'var(--accent-bright)' }} />
+              <span>VERIFIED PAZA PASS</span>
             </div>
           </>
         ) : (
-          <>
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
             <div
               style={{
-                width: '72px',
-                height: '72px',
-                borderRadius: '50%',
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '2px solid #ef4444',
+                width: '40px',
+                height: '40px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                margin: '0 auto 16px',
-                color: '#ef4444',
+                margin: '0 auto 14px',
+                color: '#f87171',
               }}
             >
-              <XCircle size={40} />
+              <X size={20} />
             </div>
 
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff', margin: '0 0 8px' }}>
-              INVALID OR EXPIRED TICKET
+            <h2 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>
+              Invalid or Expired Pass
             </h2>
-            <p style={{ fontSize: '13px', color: '#94a3b8', margin: '0 0 20px' }}>
-              {result?.message || 'This ticket code could not be verified in our system.'}
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px' }}>
+              {result?.message || 'This ticket code could not be verified.'}
             </p>
-          </>
+          </div>
         )}
 
         {onClose && (
@@ -217,18 +212,19 @@ export const TicketPassScreen: React.FC<TicketPassScreenProps> = ({ eventId, tic
             type="button"
             onClick={onClose}
             style={{
-              marginTop: '24px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: 'none',
-              color: '#ffffff',
-              padding: '10px 20px',
-              borderRadius: '12px',
+              width: '100%',
+              marginTop: '20px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-primary)',
+              padding: '10px 16px',
+              borderRadius: '6px',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 500,
               cursor: 'pointer',
             }}
           >
-            Close Window
+            Close
           </button>
         )}
       </div>
