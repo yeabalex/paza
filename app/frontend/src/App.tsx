@@ -116,7 +116,12 @@ export function App() {
           })
           .catch(() => {});
 
-        const profile = await fetchUserProfile(clerkUser.id, displayUsername, displayName).catch(() => null);
+        const profile = await fetchUserProfile(
+          clerkUser.id,
+          displayUsername,
+          displayName,
+          clerkUser.email || undefined
+        ).catch(() => null);
 
         if (cancelled) return;
 

@@ -56,13 +56,13 @@ class UserRepository:
 
         def _sync_fields(target_user: User) -> bool:
             changed = False
-            if not target_user.clerk_id:
+            if target_user.clerk_id != clerk_id:
                 target_user.clerk_id = clerk_id
                 changed = True
             if not target_user.telegram_id:
                 target_user.telegram_id = numeric_id
                 changed = True
-            if clean_email and not target_user.email:
+            if clean_email and target_user.email != clean_email:
                 target_user.email = clean_email
                 changed = True
             if full_name and target_user.full_name != full_name:
@@ -80,7 +80,7 @@ class UserRepository:
             email_stmt = select(User).where(User.email == clean_email)
             email_res = await db.execute(email_stmt)
             candidate = email_res.scalar_one_or_none()
-            if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
+            if candidate:
                 user = candidate
 
         needs_write = False
@@ -106,13 +106,11 @@ class UserRepository:
             except IntegrityError:
                 await db.rollback()
                 existing = await UserRepository.get_by_clerk_id(db, clerk_id)
-                if not existing:
-                    existing = await UserRepository.get_by_telegram_id(db, numeric_id)
                 if not existing and clean_email:
                     email_res = await db.execute(select(User).where(User.email == clean_email))
-                    candidate = email_res.scalar_one_or_none()
-                    if candidate and (not candidate.clerk_id or candidate.clerk_id == clerk_id):
-                        existing = candidate
+                    existing = email_res.scalar_one_or_none()
+                if not existing:
+                    existing = await UserRepository.get_by_telegram_id(db, numeric_id)
                 if not existing:
                     raise
                 if _sync_fields(existing):

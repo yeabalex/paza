@@ -9,7 +9,8 @@ export async function fetchInterests(): Promise<Interest[]> {
 export async function fetchUserProfile(
   userId: number | string,
   username?: string,
-  fullName?: string
+  fullName?: string,
+  email?: string
 ): Promise<UserProfile | null> {
   let url = `/users/me?user_id=${encodeURIComponent(String(userId))}`;
   if (username) {
@@ -17,6 +18,9 @@ export async function fetchUserProfile(
   }
   if (fullName) {
     url += `&full_name=${encodeURIComponent(fullName)}`;
+  }
+  if (email) {
+    url += `&email=${encodeURIComponent(email)}`;
   }
   return await apiFetch<UserProfile>(url, {}, 1);
 }

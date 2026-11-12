@@ -28,31 +28,32 @@ async def _resolve_or_provision_web_user(
     telegram_id: Optional[int] = None,
     username: Optional[str] = None,
     full_name: Optional[str] = None,
+    email: Optional[str] = None,
 ) -> User:
     """Resolve or provision the PostgreSQL User from Clerk claims or fallback guest/header identity."""
     if current_user.get("auth_provider") == "clerk":
         clerk_id = current_user["clerk_id"]
-        email = current_user.get("email")
+        resolved_email = current_user.get("email") or email
         resolved_name = current_user.get("full_name") or full_name
         resolved_username = current_user.get("username") or username
 
         existing_user = await UserRepository.get_by_clerk_id(db, clerk_id)
         if existing_user:
-            email = email or existing_user.email
+            resolved_email = resolved_email or existing_user.email
             resolved_name = resolved_name or existing_user.full_name
             resolved_username = resolved_username or existing_user.username
 
-        if not email or not resolved_name:
+        if not resolved_email or not resolved_name:
             clerk_profile = await clerk_verifier.fetch_user_profile(clerk_id)
             if clerk_profile:
-                email = email or clerk_profile.get("email")
+                resolved_email = resolved_email or clerk_profile.get("email")
                 resolved_name = resolved_name or clerk_profile.get("full_name")
                 resolved_username = resolved_username or clerk_profile.get("username")
 
         return await UserRepository.get_or_create_by_clerk_id(
             db=db,
             clerk_id=clerk_id,
-            email=email,
+            email=resolved_email,
             full_name=resolved_name or "Web User",
             username=resolved_username,
             preferred_language="en",
@@ -83,6 +84,7 @@ async def get_current_user_profile(
     telegram_id: Optional[int] = Query(None, description="Numeric User ID for backwards compatibility"),
     username: Optional[str] = Query(None, description="User handle"),
     full_name: Optional[str] = Query(None, description="User full name"),
+    email: Optional[str] = Query(None, description="User email"),
     current_user: dict = Depends(get_current_web_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -95,6 +97,7 @@ async def get_current_user_profile(
             telegram_id=telegram_id,
             username=username,
             full_name=full_name,
+            email=email,
         )
         profile = await UserRepository.build_user_profile(db, user)
     except Exception as e:
