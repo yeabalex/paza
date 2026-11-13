@@ -157,13 +157,15 @@ class ScraperProducer:
     async def run_unified_producer_cycle(
         self,
         targets: List[ScraperTarget],
+        clear_errors: bool = True,
     ) -> List[ScraperTarget]:
-        """Execute a single producer cycle across all targets, routing by platform + target_type.
+        """Execute a single producer cycle across a target chunk or list, routing by platform + target_type.
 
         Returns the updated targets list with refreshed watermarks.
         """
         active_targets = [t for t in targets if t.is_active]
-        self.last_errors = []
+        if clear_errors:
+            self.last_errors = []
         logger.info(f"=== Unified Producer Cycle: {len(active_targets)} active targets ===")
         staged_total = 0
 

@@ -61,15 +61,38 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str = "paza-events-media"
     S3_PUBLIC_URL: str = ""
     UPLOAD_DIR: str = "static/uploads"
+    SCRAPER_TARGET_CHUNK_SIZE: int = 5
 
-    @field_validator("PORT", "JWT_ACCESS_TOKEN_EXPIRE_DAYS", mode="before")
+    # Rate Limiting Settings
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_DEFAULT_PER_MINUTE: int = 120
+    RATE_LIMIT_SCRAPER_PER_MINUTE: int = 15
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 20
+
+    @field_validator(
+        "PORT",
+        "JWT_ACCESS_TOKEN_EXPIRE_DAYS",
+        "SCRAPER_TARGET_CHUNK_SIZE",
+        "RATE_LIMIT_DEFAULT_PER_MINUTE",
+        "RATE_LIMIT_SCRAPER_PER_MINUTE",
+        "RATE_LIMIT_AUTH_PER_MINUTE",
+        mode="before",
+    )
     @classmethod
     def parse_empty_int(cls, v, info):
         if v == "" or v is None:
-            return {"PORT": 8000, "JWT_ACCESS_TOKEN_EXPIRE_DAYS": 30}.get(info.field_name, 30)
+            defaults = {
+                "PORT": 8000,
+                "JWT_ACCESS_TOKEN_EXPIRE_DAYS": 30,
+                "SCRAPER_TARGET_CHUNK_SIZE": 5,
+                "RATE_LIMIT_DEFAULT_PER_MINUTE": 120,
+                "RATE_LIMIT_SCRAPER_PER_MINUTE": 15,
+                "RATE_LIMIT_AUTH_PER_MINUTE": 20,
+            }
+            return defaults.get(info.field_name, 60)
         return int(v)
 
-    @field_validator("DEBUG", mode="before")
+    @field_validator("DEBUG", "RATE_LIMIT_ENABLED", mode="before")
     @classmethod
     def parse_empty_bool(cls, v):
         if v == "" or v is None:

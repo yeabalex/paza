@@ -12,6 +12,7 @@ from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
+from app.core.config import settings
 from app.core.pipeline_logger import PipelineLogger
 from app.schemas.event import ScraperTarget
 from app.services.scraper.db_target_repository import DatabaseTargetRepository
@@ -41,20 +42,27 @@ async def run_pipeline_gateway(
     db_repo = DatabaseTargetRepository()
     redis_storage = RedisEventStorage()
 
-    # Stage 1: Fetch active targets from PostgreSQL DB
-    PipelineLogger.log_stage(1, "PostgreSQL Active Targets Fetch")
+    # Stage 1: Fetch active targets from PostgreSQL DB in prioritized chunks (watermark 0 first)
+    target_chunk_size = getattr(settings, "SCRAPER_TARGET_CHUNK_SIZE", 5)
+    PipelineLogger.log_stage(1, "PostgreSQL Active Targets Fetch", f"Prioritizing fresh channels (watermark=0); Chunk size: {target_chunk_size}")
+
+    target_chunks: List[List[ScraperTarget]] = []
     try:
-        targets = await db_repo.get_active_targets()
+        async for chunk in db_repo.get_active_targets_chunked(
+            chunk_size=target_chunk_size,
+            prioritize_unscraped=True
+        ):
+            target_chunks.append(chunk)
     except Exception as db_err:
         PipelineLogger.log_pipeline_failure("Stage 1: PostgreSQL Active Targets Fetch", db_err, time.time() - start_time)
         raise RuntimeError(f"Pipeline Gateway failed fetching active targets from PostgreSQL: {db_err}") from db_err
 
-    if not targets:
+    if not target_chunks:
         path = Path(config_file)
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
                 raw_list = json.load(f)
-            targets = [
+            fallback_targets = [
                 ScraperTarget(
                     platform=item["platform"],
                     target_type=item.get("target_type", "username"),
@@ -65,32 +73,59 @@ async def run_pipeline_gateway(
                 )
                 for item in raw_list
             ]
-            PipelineLogger.log_stage(1, "PostgreSQL Active Targets Fetch", f"Loaded {len(targets)} fallback targets from '{config_file}'")
+            fallback_targets.sort(key=lambda t: 0 if t.last_watermark in ("0", "", None) else 1)
+            target_chunks = [
+                fallback_targets[i : i + target_chunk_size]
+                for i in range(0, len(fallback_targets), target_chunk_size)
+            ]
+            total_fallback = sum(len(c) for c in target_chunks)
+            PipelineLogger.log_stage(
+                1,
+                "PostgreSQL Active Targets Fetch",
+                f"Loaded {total_fallback} fallback targets from '{config_file}' across {len(target_chunks)} chunks"
+            )
         else:
             err = RuntimeError(f"No active targets found in PostgreSQL DB or '{config_file}'")
             PipelineLogger.log_pipeline_failure("Stage 1: Target Load", err, time.time() - start_time)
             raise err
 
-    # Stage 2: Run scraping producer cycle
-    PipelineLogger.log_stage(2, "Multi-Platform Scraping Producer Cycle", f"{len(targets)} active targets")
+    total_targets_count = sum(len(c) for c in target_chunks)
+    PipelineLogger.log_stage(
+        1,
+        "Prioritized Active Targets Loaded",
+        f"{total_targets_count} active targets in {len(target_chunks)} chunk(s) (Priority: watermark=0 first)"
+    )
+
+    # Stage 2 & 3: Run chunked scraping producer cycle and sync watermarks per chunk
     queue_manager = RedisQueueManager()
     producer = ScraperProducer(queue_manager=queue_manager)
+    all_processed_targets: List[ScraperTarget] = []
 
-    try:
-        updated_targets = await producer.run_unified_producer_cycle(targets)
-    except Exception as scrap_err:
-        PipelineLogger.log_pipeline_failure("Stage 2: Multi-Platform Scraping Producer Cycle", scrap_err, time.time() - start_time)
-        raise RuntimeError(f"Pipeline Gateway scraping producer cycle failed: {scrap_err}") from scrap_err
+    for chunk_idx, chunk in enumerate(target_chunks, start=1):
+        PipelineLogger.log_stage(
+            2,
+            f"Chunked Scraping Batch {chunk_idx}/{len(target_chunks)}",
+            f"Processing {len(chunk)} targets (unscraped priority first)"
+        )
+        try:
+            updated_chunk = await producer.run_unified_producer_cycle(chunk, clear_errors=False)
+            all_processed_targets.extend(updated_chunk)
+        except Exception as scrap_err:
+            PipelineLogger.log_pipeline_failure(
+                f"Stage 2: Chunked Scraping Batch {chunk_idx}", scrap_err, time.time() - start_time
+            )
+            raise RuntimeError(f"Pipeline Gateway scraping batch {chunk_idx} failed: {scrap_err}") from scrap_err
+
+        # Stage 3: Immediate Watermark Synchronization for the completed chunk
+        try:
+            await db_repo.sync_all_watermarks(updated_chunk)
+        except Exception as db_sync_err:
+            PipelineLogger.log_pipeline_failure(
+                f"Stage 3: Watermark Sync Batch {chunk_idx}", db_sync_err, time.time() - start_time
+            )
+            raise RuntimeError(f"Pipeline Gateway failed syncing watermarks for batch {chunk_idx}: {db_sync_err}") from db_sync_err
 
     error_logs: List[str] = list(getattr(producer, "last_errors", []) or [])
-
-    # Stage 3: Sync watermarks back to DB
-    PipelineLogger.log_stage(3, "PostgreSQL Watermark Synchronization")
-    try:
-        await db_repo.sync_all_watermarks(updated_targets)
-    except Exception as db_sync_err:
-        PipelineLogger.log_pipeline_failure("Stage 3: PostgreSQL Watermark Synchronization", db_sync_err, time.time() - start_time)
-        raise RuntimeError(f"Pipeline Gateway failed syncing watermarks to PostgreSQL: {db_sync_err}") from db_sync_err
 
     # Stage 4 & 5: Processing staged raw posts & LLM extraction
     staged_task_ids = list(queue_manager._in_memory_staging.keys())
@@ -306,7 +341,7 @@ async def run_pipeline_gateway(
     duration = round(time.time() - start_time, 2)
     summary = PipelineLogger.log_pipeline_success(
         duration_seconds=duration,
-        targets_processed=len(targets),
+        targets_processed=len(all_processed_targets),
         total_posts_scraped=len(scraped_posts),
         events_extracted=events_extracted_count,
         non_events_count=non_events_count,

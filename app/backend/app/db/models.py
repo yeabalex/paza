@@ -365,6 +365,8 @@ class ScraperTargetDB(Base):
         UniqueConstraint("platform", "target_type", "value", name="uq_scraper_target"),
         Index("idx_scraper_targets_platform", "platform"),
         Index("idx_scraper_targets_active", "is_active"),
+        Index("idx_scraper_targets_watermark", "last_watermark"),
+        Index("idx_scraper_targets_active_watermark", "is_active", "last_watermark"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

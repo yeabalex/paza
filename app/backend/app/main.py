@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.rate_limiter import RateLimitMiddleware
 from app.core.security import AuthEnforcementMiddleware
 
 
@@ -54,6 +55,8 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS ticket_code VARCHAR(100);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_event_rsvps_ticket_code ON event_rsvps (ticket_code);"))
                 await conn.execute(text("ALTER TABLE event_rsvps ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'pending';"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_scraper_targets_watermark ON scraper_targets (last_watermark);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_scraper_targets_active_watermark ON scraper_targets (is_active, last_watermark);"))
         logger.info("Database tables initialized successfully.")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
@@ -71,8 +74,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Global fail-closed Auth Middleware (added before CORS so CORS wraps 401/403 responses)
+# Global fail-closed Auth Middleware (innermost security layer)
 app.add_middleware(AuthEnforcementMiddleware)
+
+# Global Rate Limiting Middleware (protects endpoints and auth from request floods)
+app.add_middleware(RateLimitMiddleware)
 
 _cors_origins = [
     "https://paza.yab.et",
